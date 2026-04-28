@@ -1,0 +1,9 @@
+main
+tmp/
+config.yaml
+access.yaml
+libraries/*
+modules/*
+go/*
+!modules/proxy
+*/.DS_Store

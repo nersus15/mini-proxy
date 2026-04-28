@@ -1,0 +1,80 @@
+## BUILD STAGE
+FROM cgr.dev/chainguard/go:latest AS builder
+
+# Install librdkafka build dependencies
+# Required for CGO compilation with confluent-kafka-go
+# RUN apk add --no-cache \
+#     librdkafka-dev \
+#     openssl-dev \
+#     zlib-dev \
+#     gcc
+
+# Set working directory
+WORKDIR /tmp
+
+# Copy source code
+COPY . .
+
+# Copy go mod files
+# COPY go.work go.work.sum ./
+
+# Download dependencies
+RUN go work sync
+
+# Build the application
+# Dengan Kafka ditanam ke dalam binary
+RUN CGO_ENABLED=1 GOOS=linux go build -o ./main ./webcore/main.go
+
+# # Jika Tanpa Kafka
+# RUN CGO_ENABLED=0 GOOS=linux go build -o ./main ./webcore/main.go
+
+# Build the migrate tool
+RUN CGO_ENABLED=0 GOOS=linux go build -o ./migrate ./webcore/init/migrate.go
+
+## PRODUCTION STAGE
+FROM cgr.dev/chainguard/static:latest AS production
+
+# RUN mkdir -p /etc/webcore
+
+# Install librdkafka runtime dependencies
+# librdkafka requires: librdkafka1, libssl3, libcrypto3, zlib, libstdc++
+# RUN apk add --no-cache \
+#     librdkafka \
+#     libssl3 \
+#     libcrypto3 \
+#     zlib \
+#     libstdc++ \
+#     libgcc
+
+# Create user and group with limited privileges (non-root)
+# RUN addgroup -g 2000 webcore && \
+#     adduser -D -u 2000 -G webcore webcore
+
+# Set working directory
+# WORKDIR /etc/webcore
+
+# Copy binary from builder
+COPY --from=builder /tmp/main /usr/local/bin/webcore
+COPY --from=builder /tmp/migrate /usr/local/bin/migrate
+
+# Copy configuration files
+COPY --from=builder /tmp/config.yaml.example /config.yaml
+COPY --from=builder /tmp/access.yaml.example /access.yaml
+COPY --from=builder /tmp/webcore/init /
+
+# Set ownership of working directory to webcore user
+# RUN chown -R webcore:webcore /app
+
+# Switch to webcore user
+# USER webcore
+
+# Expose port
+# Port check health untuk FHIR Stream
+EXPOSE 2021
+# Port untuk FHIR Gateway
+EXPOSE 2022
+# Port untuk FHIR Consent
+EXPOSE 2023
+
+# Run the application
+CMD ["webcore", "stream"]

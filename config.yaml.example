@@ -1,0 +1,122 @@
+app:
+  name: konsolidator-api
+  version: 1.0.0
+  environment: development
+
+  # features flags
+  features:
+    recovery: true
+    metrics: false
+    tracing: false
+    profiling: false
+
+  # logging settings
+  logging:
+    level: info
+    format: "${time} | ${status} | ${latency} | ${ip} | ${method} | ${path} | ${error}\n"
+    output: stdout
+
+  # Security settings
+  security_headers: true
+
+  # CORS settings
+  cors:
+    allow_origins:
+      - "http://localhost:7272"
+      - "http://localhost:8080"
+    allow_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+      - "OPTIONS"
+    allow_headers:
+      - "Origin"
+      - "Content-Type"
+      - "Accept"
+      - "Authorization"
+    allow_credentials: true
+    expose_headers:
+      - "Content-Length"
+    max_age: 24h  # 24 hours
+
+  # API rate limiting settings per minute
+  rate_limit:
+    enabled: true
+    limit: 1000
+    # burst: 100
+
+  module:
+    base_path: "./ext"
+    disabled:
+      - "modulea"
+
+server:
+  host: 0.0.0.0
+  port: 2021
+  path: "/api"
+  read_timeout: 30s
+  write_timeout: 30s
+
+auth:
+  control: RBAC
+  store: yaml # yaml, db
+  type: apikey # Options: "jwt", "apikey", "basic"
+  secret_key: your-secret-key-here
+  expires_in: 86400 # 24 hours in seconds
+  # API Key specific settings (only used when type is "apikey")
+  # api_key_header: "X-API-Key"  # Header name for API key
+  # api_key_prefix: ""  # Optional prefix for API key validation
+
+database:
+  driver: postgres
+  host: ""
+  port: 5432
+  user: konsolidator
+  password: konsolidator
+  name: konsolidator
+  schema_name: public
+  ssl_mode: disable
+  max_idle_conns: 10
+  max_open_conns: 100
+  conn_max_lifetime: 60m
+  # Example slave database configuration
+  # slave_hosts:
+  #   - host: slave1.example.com
+  #     port: 5432
+  #     user: konsolidator
+  #     password: konsolidator
+  #     database: konsolidator
+  #     ssl_mode: disable
+  #     max_idle_conns: 5
+  #     max_open_conns: 50
+  #     conn_max_lifetime: 3600
+
+redis:
+  host: ""
+  port: 6379
+  password: ""
+  db: 0
+  # Example slave Redis configuration
+  # slave_hosts:
+  #   - host: slave1.example.com
+  #     port: 6379
+  #     password: ""
+  #     db: 0
+
+kafka:
+  brokers:
+    - "localhost:9092"
+  consumer_group_id: konsolidator-group
+  topics:
+    - konsolidator-topic
+
+# Google PubSub configuration
+pubsub:
+  project_id: ""
+  topic: ""
+  subscription: ""
+  emulator_host: ""
+  credentials: ""
+  max_messages_per_pull: 50
+  sleep_time_between_pulls: 10s

@@ -1,0 +1,124 @@
+## DEVELOPMENT STAGE
+FROM golang:1.25-alpine3.23 AS development
+
+# Set direktori kerja
+WORKDIR /app
+
+# Copy source code
+COPY . .
+
+# Copy go mod files
+# COPY go.work go.work.sum ./
+
+# Download dependencies
+RUN go work sync
+
+# Install Watch tool untuk live reload saat development
+RUN go install github.com/air-verse/air@latest
+
+# Instal Delve untuk debugging
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+
+# Build Producer
+RUN go build -o /app/webcore /app/webcore/main.go
+
+# Create user and group with limited privileges (non-root)
+RUN addgroup -g 2000 webcore && \
+    adduser -D -u 2000 -G webcore webcore
+
+# Set ownership of working directory to webcore user
+RUN chown -R webcore:webcore /app
+
+# Switch to webcore user
+USER webcore
+
+# Port check health untuk FHIR Stream
+EXPOSE 2021
+# Port untuk FHIR Gateway
+EXPOSE 2022
+# Port untuk FHIR Consent
+EXPOSE 2023
+
+# CMD ["air", "--build.cmd", "go build -o /app/webcore /app/cmd/consumer/main.go", "--build.bin", "/app/webcore", "--debug.host", "0.0.0.0", "--debug.port", "2345"]
+CMD ["air", "-c", "/app/.air-direct-stream.toml"]
+
+## BUILD STAGE
+FROM golang:1.25-trixie AS builder
+
+# Install packages required for CGO and librdkafka
+# build-essential: Provides GCC, make, and other build tools
+# librdkafka-dev: Development headers for librdkafka
+# librdkafka1: Runtime library for librdkafka
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    librdkafka-dev \
+    librdkafka1 \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy source code
+COPY . .
+
+# Copy go mod files
+# COPY go.work go.work.sum ./
+
+# Download dependencies
+RUN go work sync
+
+# Build the application
+# Dengan Kafka
+# CGO_ENABLED=1 harus diatur agar librdkafka dapat di-link secara dinamis
+# Ini menghasilkan binary yang membutuhkan shared library librdkafka
+RUN CGO_ENABLED=1 GOOS=linux go build -o /app/webcore /app/webcore/main.go
+
+# # Jika Tanpa Kafka
+# RUN CGO_ENABLED=0 GOOS=linux go build -o /app/webcore /app/webcore/main.go
+
+# Build the migrate tool
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/migrate webcore/init/migrate.go
+
+## PRODUCTION STAGE
+FROM debian:trixie-slim AS production
+
+# Install runtime dependencies for librdkafka
+# The binary is built with CGO_ENABLED=1 and dynamically links to librdkafka
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    librdkafka1 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create user and group with limited privileges (non-root)
+RUN groupadd -g 2000 webcore && \
+    useradd -r -u 2000 -g webcore webcore
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/webcore /usr/local/bin/webcore
+COPY --from=builder /app/migrate /usr/local/bin/migrate
+
+# Copy configuration files
+COPY --from=builder /app/config.yaml.example ./config.yaml
+COPY --from=builder /app/access.yaml.example ./access.yaml
+COPY --from=builder /app/webcore/init/migrations .
+
+# Set ownership of working directory to webcore user
+RUN chown -R webcore:webcore /app
+
+# Switch to webcore user
+USER webcore
+
+# Expose port
+# Port check health untuk FHIR Stream
+EXPOSE 2021
+# Port untuk FHIR Gateway
+EXPOSE 2022
+# Port untuk FHIR Consent
+EXPOSE 2023
+
+# Run the application
+CMD ["webcore", "stream"]

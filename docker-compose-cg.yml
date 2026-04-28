@@ -1,0 +1,5 @@
+services:
+  chainguard:
+    image: kemenkesri/satusehat-fhir-stream:dev-latest
+    # command: ["sleep", "infinity"]
+    command: ["/app/main", "stream"]

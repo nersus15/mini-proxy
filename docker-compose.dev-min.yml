@@ -1,0 +1,57 @@
+services:
+  stream:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    environment:
+      - DATABASE_HOST=mongodb
+    ports:
+      - "7272:7272"
+    volumes:
+      - .:/app
+      - ./config.yaml:/app/config.yaml:ro
+      - ./access.yaml:/app/access.yaml:ro
+      - ./credentials.json:/app/credentials.json:ro
+    networks:
+      - xtb
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    command: ["air", "-c", "/app/.air-direct-gateway.toml"]
+    environment:
+      - DATABASE_HOST=mongodb
+    ports:
+      - "7272:7272"
+    volumes:
+      - .:/app
+      - ./config.yaml:/app/config.yaml:ro
+      - ./access.yaml:/app/access.yaml:ro
+      - ./credentials.json:/app/credentials.json:ro
+    networks:
+      - xtb
+
+  consent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    command: ["air", "-c", "/app/.air-direct-consent.toml"]
+    environment:
+      - DATABASE_HOST=mongodb
+    ports:
+      - "7272:7272"
+    volumes:
+      - .:/app
+      - ./config.yaml:/app/config.yaml:ro
+      - ./access.yaml:/app/access.yaml:ro
+      - ./credentials.json:/app/credentials.json:ro
+    networks:
+      - xtb
+
+networks:
+  xtb:
+    external: true

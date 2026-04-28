@@ -1,0 +1,66 @@
+version: "3.8"
+
+services:
+  wwebcorego:
+    build: .
+    ports:
+      - "7272:7272"
+    environment:
+      - APP_ENV=development
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=7272
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=webcore
+      - DATABASE_PASSWORD=webcore
+      - DATABASE_NAME=webcore
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+    volumes:
+      - ./config:/app/config
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - webcore-network
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=webcore
+      - POSTGRES_PASSWORD=webcore
+      - POSTGRES_DB=webcore
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - webcore-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - webcore-network
+
+  # Optional: Adminer for database management
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    networks:
+      - webcore-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  webcore-network:
+    driver: bridge
