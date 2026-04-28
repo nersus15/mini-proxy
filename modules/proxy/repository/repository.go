@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"github.com/nersus15/mini-proxy/config"
+	"github.com/nersus15/mini-proxy/proxy/config"
 	"github.com/webcore-go/webcore/app/core"
 	"github.com/webcore-go/webcore/port"
 )
