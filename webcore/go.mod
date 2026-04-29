@@ -1,4 +1,4 @@
-module github.com/kemenkesri/satusehat-fhir-webcore
+module github.com/nersus15/mini-proxy
 
 go 1.25.0
 
@@ -69,7 +69,7 @@ require (
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/webcore-go/lib-postgres v0.1.14
 	github.com/webcore-go/lib-sql v0.1.16
-	github.com/webcore-go/webcore v0.0.22
+	github.com/webcore-go/webcore v0.0.23
 	go.opentelemetry.io/otel v1.42.0 // indirect
 	go.opentelemetry.io/otel/trace v1.42.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect

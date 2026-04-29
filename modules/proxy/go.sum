@@ -54,8 +54,7 @@ github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6Kllzaw
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/valyala/fasthttp v1.69.0 h1:fNLLESD2SooWeh2cidsuFtOcrEi4uB4m1mPrkJMZyVI=
 github.com/valyala/fasthttp v1.69.0/go.mod h1:4wA4PfAraPlAsJ5jMSqCE2ug5tqUPwKXxVj8oNECGcw=
-github.com/webcore-go/webcore v0.0.22 h1:vQzSuOPAz9BqLmfMlQxfnpLAsZaQ0Ay4zZFv5p+2+ZY=
-github.com/webcore-go/webcore v0.0.22/go.mod h1:SSwl4+udSE7JZCdWj9FjPgW4FCJjSWVxtkbXRQFyXeI=
+github.com/webcore-go/webcore v0.0.23 h1:+LHaOQYj/BZ2tPoaviDkv8kWG+KmFRe9OpxhlzgjcAE=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=
 github.com/xyproto/randomstring v1.0.5/go.mod h1:rgmS5DeNXLivK7YprL0pY+lTuhNQW3iGxZ18UQApw/E=
 go.yaml.in/yaml/v3 v3.0.4 h1:tfq32ie2Jv2UxXFdLJdh3jXuOzWiL1fo0bu/FbuKpbc=

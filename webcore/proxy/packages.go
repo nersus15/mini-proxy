@@ -1,7 +1,7 @@
 package proxy
 
 import (
-	"github.com/nersus15/mini-proxy/proxy"
+	proxy "github.com/nersus15/mini-proxy/mod-proxy"
 	"github.com/webcore-go/webcore/app/core"
 )
 

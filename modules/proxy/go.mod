@@ -1,9 +1,10 @@
-module github.com/nersus15/mini-proxy/proxy
+module github.com/nersus15/mini-proxy/mod-proxy
+
 go 1.25.0
 
 require (
 	github.com/gofiber/fiber/v2 v2.52.12
-	github.com/webcore-go/webcore v0.0.22
+	github.com/webcore-go/webcore v0.0.23
 )
 
 require (

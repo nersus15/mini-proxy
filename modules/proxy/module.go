@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/nersus15/mini-proxy/proxy/config"
-	"github.com/nersus15/mini-proxy/proxy/handler"
-	"github.com/nersus15/mini-proxy/proxy/repository"
-	"github.com/nersus15/mini-proxy/proxy/service"
+	"github.com/nersus15/mini-proxy/mod-proxy/config"
+	"github.com/nersus15/mini-proxy/mod-proxy/handler"
+	"github.com/nersus15/mini-proxy/mod-proxy/repository"
+	"github.com/nersus15/mini-proxy/mod-proxy/service"
 	"github.com/webcore-go/webcore/app/core"
 	appConfig "github.com/webcore-go/webcore/infra/config"
 	"github.com/webcore-go/webcore/infra/logger"
@@ -103,7 +103,7 @@ func (m *Module) Routes() []*core.ModuleRoute {
 func (m *Module) Services() map[string]any {
 	// Return services that can be used by other modules
 	return map[string]any{
-		"stream": m.service,
+		"proxy": m.service,
 	}
 }
 
@@ -111,7 +111,7 @@ func (m *Module) Services() map[string]any {
 func (m *Module) Repositories() map[string]any {
 	// Return repositories that can be used by other modules
 	return map[string]any{
-		"stream": m.repository,
+		"proxy": m.repository,
 	}
 }
 
@@ -119,6 +119,16 @@ func (m *Module) Repositories() map[string]any {
 func (m *Module) registerStandardRoutes(root fiber.Router) {
 	// Module routes
 	moduleRoot := root.Group("/" + m.Name())
+
+	apiRoot := root.Group("/fhir/r4/v1")
+
+	// POST RESOURCE
+	m.routes = core.AppendRouteToArray(m.routes, &core.ModuleRoute{
+		Method:  "POST",
+		Path:    "/:env/:resourceName",
+		Handler: m.handler.PostResource,
+		Root:    apiRoot,
+	})
 
 	// Module-specific routes
 	m.routes = core.AppendRouteToArray(m.routes, &core.ModuleRoute{
@@ -160,7 +170,7 @@ func (m *Module) Info(c *fiber.Ctx) error {
 	info := map[string]any{
 		"name":        ModuleName,
 		"version":     ModuleVersion,
-		"description": "FHIR Stream",
+		"description": "FHIR proxy",
 		"path":        path,
 		"endpoints":   endpoints,
 		"config":      m.config,
