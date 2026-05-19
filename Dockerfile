@@ -27,7 +27,7 @@ EXPOSE 2022
 EXPOSE 2023
 
 # CMD ["air", "--build.cmd", "go build -o /app/main /app/webcore/main.go", "--build.bin", "/app/webcore", "--debug.host", "0.0.0.0", "--debug.port", "2345"]
-CMD ["air", "-c", "/app/.air-stream.toml"]
+CMD ["air", "-c", "/app/.air-proxy.toml"]
 
 ## BUILD STAGE
 FROM golang:1.25-alpine3.23 AS builder

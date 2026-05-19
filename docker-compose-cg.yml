@@ -1,5 +1,5 @@
 services:
   chainguard:
-    image: kemenkesri/satusehat-fhir-stream:dev-latest
+    image: fathur15/mini-proxy
     # command: ["sleep", "infinity"]
-    command: ["/app/main", "stream"]
+    command: ["/app/main", "proxy"]
