@@ -177,7 +177,7 @@ func (m *Module) registerStandardRoutes(root fiber.Router) {
 
 	m.routes = core.AppendRouteToArray(m.routes, &core.ModuleRoute{
 		Method:  "POST",
-		Path:    "/oauth/:env",
+		Path:    "/oauth/:env/accesstoken",
 		Handler: m.handler.GenerateToken,
 		Root:    moduleRoot,
 	})

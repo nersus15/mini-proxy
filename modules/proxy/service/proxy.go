@@ -158,8 +158,6 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 	var endpoint string
 	var errstr string
 	var errcode int
-	// var clientId string
-	// var clientSecret string
 	var satsetRes types2.SatuSehatTokenResponse
 
 	if env == "dev" {
@@ -183,24 +181,46 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 
 	payload := strings.NewReader(data.Encode())
 
-	// Cek ILDKI Dulu
 	req, err := http.NewRequest("POST", endpoint, payload)
 	if err != nil {
 		errcode = utils.ERR_SATUSEHAT_FORMAT
+		if target == "hapi" {
+			logger.Warn("Failed creating request to ILDKI, falling back to SATUSEHAT")
+			return s.GenerateToken(env, "satusehat", clientId, clientSecret)
+		}
 		return satsetRes, errcode, fmt.Sprintf("gagal membuat request: %s", err)
 	}
 	req.Header.Add("content-type", "application/x-www-form-urlencoded")
+
 	response, err := s.httpClient(&env).Do(req)
 	if err != nil {
 		errcode, errstr = utils.HttpError("satusehat", req, nil, err)
-		logger.Error("Forward Request Connection Error", "To", endpoint, "env", env, "Err", errstr, "code", errcode)
+		logger.Error("Connection Error", "To", endpoint, "env", env, "Err", errstr, "code", errcode)
+
+		if target == "hapi" {
+			logger.Warn("Failed connecting to ILDKI, falling back to SATUSEHAT")
+			return s.GenerateToken(env, "satusehat", clientId, clientSecret)
+		}
 		return satsetRes, errcode, errstr
 	}
 	defer response.Body.Close()
+
 	bodyBytes, _ := io.ReadAll(response.Body)
+
+	if response.StatusCode != http.StatusOK {
+		if target == "hapi" {
+			logger.Warn(fmt.Sprintf("HAPI returned status %d, falling back to SATUSEHAT", response.StatusCode))
+			return s.GenerateToken(env, "satusehat", clientId, clientSecret)
+		}
+		return satsetRes, response.StatusCode, fmt.Sprintf("upstream returned error status: %d body: %s", response.StatusCode, string(bodyBytes))
+	}
 
 	err = json.Unmarshal(bodyBytes, &satsetRes)
 	if err != nil {
+		if target == "hapi" {
+			logger.Warn("Failed to unmarshal ILDKI response, falling back to SATUSEHAT")
+			return s.GenerateToken(env, "satusehat", clientId, clientSecret)
+		}
 		return satsetRes, errcode, fmt.Sprintf("gagal unmarshall Response request: %s", err)
 	}
 

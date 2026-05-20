@@ -35,7 +35,7 @@ func (h *HttpHandler) GenerateToken(c *fiber.Ctx) error {
 	var body TokenPayload
 	err := c.BodyParser(&body)
 
-	if err != nil {
+	if err != nil || body.ClientId == "" || body.ClientSecret == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(out.Error(
 			fiber.StatusBadRequest,
 			fiber.StatusBadRequest,
@@ -44,23 +44,26 @@ func (h *HttpHandler) GenerateToken(c *fiber.Ctx) error {
 		))
 	}
 	logger.InfoJson("Body", body)
-	// Coba lewat ILDKI dulu
+
+	// Panggil service (otomatis fallback hapi -> satusehat di dalam service)
 	clientCredential, errcode, errstr := h.proxyService.GenerateToken(env, "hapi", body.ClientId, body.ClientSecret)
 
 	if errstr != "" {
-		// Jika gagal coba lempar langsung ke satusehat
-		clientCredential, errcode, errstr = h.proxyService.GenerateToken(env, "satusehat", body.ClientId, body.ClientSecret)
-
-		if errstr != "" {
-			return c.Status(fiber.StatusBadRequest).JSON(out.Error(
-				fiber.StatusBadRequest,
-				errcode,
-				"GENERATED",
-				errstr,
-			))
-		}
+		return c.Status(fiber.StatusBadRequest).JSON(out.Error(
+			fiber.StatusBadRequest,
+			errcode,
+			"GENERATION_FAILED",
+			errstr,
+		))
 	}
-	h.proxyService.SaveCredential(env, &clientCredential)
+
+	// Pastikan access_token benar-benar ada sebelum memicu background worker
+	if clientCredential.AccessToken != "" {
+		h.proxyService.SaveCredential(env, &clientCredential)
+	} else {
+		logger.Warn("Access token is empty, skipping background save")
+	}
+
 	return c.Status(fiber.StatusOK).JSON(clientCredential)
 }
 
