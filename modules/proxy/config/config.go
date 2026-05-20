@@ -13,8 +13,8 @@ type ModuleConfig struct {
 	ResourceUseMasterToken []string                   `mapstructure:"use_master_token" json:"use_master_token"`
 	FhirSource             FhirSource                 `mapstructure:"source" json:"source"`
 	Kafka                  config.KafkaConfig         `mapstructure:"kafka" json:"kafka"`
-	Cron                   CronConfig                 `mapstructru:"cron" json:"cron"`
-	Ildki                  IldkiConfig                `mapstructure:"hapi" json:"json"`
+	Cron                   CronConfig                 `mapstructure:"cron" json:"cron"`
+	Ildki                  IldkiConfig                `mapstructure:"ildki" json:"ildki"`
 }
 
 type SatusehatPropagationConfig struct {
@@ -46,6 +46,12 @@ func (c *ModuleConfig) SetEnvBindings() map[string]string {
 		"module.fhir.ildki.development_authurl": "MODULE_FHIR_ILDKI_DEVELOPMENT_AUTHURL",
 		"module.fhir.ildki.production_authurl":  "MODULE_FHIR_ILDKI_PRODUCTION_AUTHURL",
 
+		"module.fhir.hapi.enabled":             "MODULE_FHIR_ILDKI_ENABLED",
+		"module.fhir.hapi.production_url":      "MODULE_FHIR_ILDKI_PRODUCTION_URL",
+		"module.fhir.hapi.development_url":     "MODULE_FHIR_ILDKI_DEVELOPMENT_URL",
+		"module.fhir.hapi.development_authurl": "MODULE_FHIR_ILDKI_DEVELOPMENT_AUTHURL",
+		"module.fhir.hapi.production_authurl":  "MODULE_FHIR_ILDKI_PRODUCTION_AUTHURL",
+
 		"module.fhir.production.baseurl":       "MODULE_FHIR_PRODUCTION_BASEURL",
 		"module.fhir.production.authurl":       "MODULE_FHIR_PRODUCTION_AUTHURL",
 		"module.fhir.production.client_id":     "MODULE_FHIR_PRODUCTION_CLIENT_ID",
@@ -72,18 +78,20 @@ func (c *ModuleConfig) SetEnvBindings() map[string]string {
 		"kafka.group":   "KAFKA_GROUP_ID",
 		"kafka.offset":  "KAFKA_AUTO_OFFSET_RESET",
 		"kafka.topics":  "KAFKA_TOPICS",
-		"cron.enabled":  "CRON_ENABLED",
-		"cron.schedule": "CRON_SCHEDULE",
+
+		// CRON
+		"module.fhir.cron.enabled":  "CRON_ENABLED",
+		"module.fhir.cron.schedule": "CRON_SCHEDULE",
 	}
 }
 
 func (c *ModuleConfig) SetDefaults() map[string]any {
-	return map[string]any{
-		"module.fhir.hapi.enabled":             true,
-		"module.fhir.hapi.production_url":      "https://api.ildki.appgo.my.id/prod/fhir/r4/v1",
-		"module.fhir.hapi.development_url":     "https://api.ildki.appgo.my.id/dev/fhir/r4/v1",
-		"module.fhir.hapi.development_authurl": "https://api.ildki.appgo.my.id/dev/oauth2/v1/accesstoken?grant_type=client_credentials",
-		"module.fhir.hapi.production_authurl":  "https://api.ildki.appgo.my.id/prod/oauth2/v1/accesstoken?grant_type=client_credentials",
+	data := map[string]any{
+		"module.fhir.ildki.enabled":             true,
+		"module.fhir.ildki.production_url":      "https://api.ildki.appgo.my.id/prod/fhir/r4/v1",
+		"module.fhir.ildki.development_url":     "https://api.ildki.appgo.my.id/dev/fhir/r4/v1",
+		"module.fhir.ildki.development_authurl": "https://api.ildki.appgo.my.id/dev/oauth2/v1/accesstoken?grant_type=client_credentials",
+		"module.fhir.ildki.production_authurl":  "https://api.ildki.appgo.my.id/prod/oauth2/v1/accesstoken?grant_type=client_credentials",
 
 		"module.fhir.production.baseurl":       "https://api-satusehat.kemkes.go.id/fhir-r4/v1",
 		"module.fhir.production.authurl":       "https://api-satusehat.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials",
@@ -102,9 +110,18 @@ func (c *ModuleConfig) SetDefaults() map[string]any {
 
 		"module.fhir.source.priority": "satusehat-first",
 		"module.fhir.source.header":   "X-FHIR-Source-Priority",
-		"cron.enabled":                true,
-		"cron.schedule":               "59 23 * * *",
+		"module.fhir.cron.enabled":    true,
+		"module.fhir.cron.schedule":   "59 23 * * *",
 	}
+
+	// tambahkan key hapi dengan value sama persis dari ildki
+	data["module.fhir.hapi.enabled"] = data["module.fhir.ildki.enabled"]
+	data["module.fhir.hapi.production_url"] = data["module.fhir.ildki.production_url"]
+	data["module.fhir.hapi.development_url"] = data["module.fhir.ildki.development_url"]
+	data["module.fhir.hapi.production_authurl"] = data["module.fhir.ildki.production_authurl"]
+	data["module.fhir.hapi.development_authurl"] = data["module.fhir.ildki.development_authurl"]
+
+	return data
 }
 
 func (c *ModuleConfig) ToFhirConfig() *config2.FhirTransactionConfig {
