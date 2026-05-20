@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -153,8 +154,100 @@ func (s *ProxyService) PutResource(env string, resourceType string, id string, c
 	return resource, raw, 0, ""
 }
 
-func (s *ProxyService) GenerateToken(url string) {
+func (s *ProxyService) GenerateToken(env string, target string, clientId string, clientSecret string) (types2.SatuSehatTokenResponse, int, string) {
+	var endpoint string
+	var errstr string
+	var errcode int
+	// var clientId string
+	// var clientSecret string
+	var satsetRes types2.SatuSehatTokenResponse
 
+	if env == "dev" {
+		if target == "hapi" {
+			endpoint = s.Config.Ildki.DevAuthURL
+		} else {
+			endpoint = s.Config.Development.AuthURL
+		}
+	} else {
+		if target == "hapi" {
+			endpoint = s.Config.Ildki.ProdAuthURL
+		} else {
+			endpoint = s.Config.Production.AuthURL
+		}
+	}
+	logger.Info("Request Token", "ENV", env, "Target", target, "Endpoint", endpoint)
+
+	data := url.Values{}
+	data.Set("client_id", clientId)
+	data.Set("client_secret", clientSecret)
+
+	payload := strings.NewReader(data.Encode())
+
+	// Cek ILDKI Dulu
+	req, err := http.NewRequest("POST", endpoint, payload)
+	if err != nil {
+		errcode = utils.ERR_SATUSEHAT_FORMAT
+		return satsetRes, errcode, fmt.Sprintf("gagal membuat request: %s", err)
+	}
+	req.Header.Add("content-type", "application/x-www-form-urlencoded")
+	response, err := s.httpClient(&env).Do(req)
+	if err != nil {
+		errcode, errstr = utils.HttpError("satusehat", req, nil, err)
+		logger.Error("Forward Request Connection Error", "To", endpoint, "env", env, "Err", errstr, "code", errcode)
+		return satsetRes, errcode, errstr
+	}
+	defer response.Body.Close()
+	bodyBytes, _ := io.ReadAll(response.Body)
+
+	err = json.Unmarshal(bodyBytes, &satsetRes)
+	if err != nil {
+		return satsetRes, errcode, fmt.Sprintf("gagal unmarshall Response request: %s", err)
+	}
+
+	logger.InfoJson("ClientCredential Dari "+target, satsetRes)
+	return satsetRes, errcode, errstr
+}
+
+func (s *ProxyService) SendCredentialToProxyIL() {}
+
+func (s *ProxyService) SaveCredential(env string, credential *types2.SatuSehatTokenResponse) {
+	logger.Info("Save User Credential In Background Process")
+	go func() {
+		entityData := credential.ToEntity()
+
+		var issuedAtUnixMilli int64
+		if credential.IssuedAt != "" {
+			var err error
+			issuedAtUnixMilli, err = strconv.ParseInt(credential.IssuedAt, 10, 64)
+			if err != nil {
+				logger.Error("Failed to parse issued_at, fallback to time.Now()", "error", err)
+				issuedAtUnixMilli = time.Now().UnixMilli()
+			}
+		} else {
+			issuedAtUnixMilli = time.Now().UnixMilli()
+		}
+
+		expiresInSeconds, err := strconv.ParseInt(credential.ExpiresIn, 10, 64)
+		if err != nil {
+			logger.Error("Failed to parse expires_in", "error", err)
+			return
+		}
+
+		issuedAtTime := time.UnixMilli(issuedAtUnixMilli)
+		expiredAt := issuedAtTime.Add(time.Duration(expiresInSeconds) * time.Second)
+
+		entityData.ExpiredAt = expiredAt
+		entityData.Env = env
+
+		err = s.Repository.SaveClientCredentials(entityData)
+
+		if err != nil {
+			logger.ErrorJson("Error saving client credential", err)
+			return
+		}
+
+		logger.Info("Successfully saved client credential", "client_id", entityData.ClientID, "env", env)
+	}()
 }
 
 func (s *ProxyService) sendRequest(method string, url string, env string, target string, auth string, body []byte) (*types.BaseResource, any, int, string) {
@@ -169,7 +262,7 @@ func (s *ProxyService) sendRequest(method string, url string, env string, target
 			errcode = utils.ERR_HAPI_FORMAT
 		}
 
-		return nil, nil, errcode, fmt.Sprintf("gagal membuat request generate: %s", err)
+		return nil, nil, errcode, fmt.Sprintf("gagal membuat request: %s", err)
 	}
 	// Set Request Header
 	req.Header.Add("Authorization", auth)

@@ -28,6 +28,22 @@ type Transactions struct {
 	UpdatedAt    time.Time       `bun:"updated_at,default:current_timestamp"`
 }
 
+type ClinetCredential struct {
+	bun.BaseModel `bun:"table:client_credentials,alias:cc"`
+
+	ClientID       string    `bun:"client_id,pk" json:"client_id"`
+	Env            string    `bun:"env,notnull" json:"env"`
+	OrganizationID *string   `bun:"organization_id" json:"organization_id,omitempty"`
+	AccessToken    string    `bun:"access_token,notnull" json:"access_token"`
+	ExpiredAt      time.Time `bun:"expired_at,notnull" json:"expired_at"`
+	CreatedAt      time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
+	UpdatedAt      time.Time `bun:"updated_at,default:current_timestamp" json:"updated_at"`
+}
+
 func (t Transactions) TableName() string {
 	return "transactions"
+}
+
+func (t ClinetCredential) TableName() string {
+	return "client_credentials"
 }

@@ -103,3 +103,33 @@ func (r *ProxyRepository) DeleteOldTransactions(status string) (int64, error) {
 
 	return r.Connection.Delete(r.Context.Context, entity.Transactions{}.TableName(), filter)
 }
+
+func (r *ProxyRepository) SaveClientCredentials(clientCredential *entity.ClinetCredential) error {
+	conn := r.Connection.GetConnection()
+	bunDB, ok := conn.(*bun.DB)
+	if !ok {
+		return fmt.Errorf("connection is not an instance of bun.DB")
+	}
+
+	logger.Debug(fmt.Sprintf("Memproses simpan/update client credentials %s ke database...", clientCredential.ClientID))
+
+	// Gunakan context bawaan dari AppContext milik repository r.Context.Context
+	ctx := r.Context.Context
+
+	_, err := bunDB.NewInsert().
+		Model(clientCredential).
+		On("DUPLICATE KEY UPDATE").
+		Set("access_token = VALUES(access_token)").
+		Set("expired_at = VALUES(expired_at)").
+		Set("env = VALUES(env)").
+		Set("updated_at = NOW()").
+		Exec(ctx)
+
+	if err != nil {
+		logger.Error(fmt.Sprintf("Gagal simpan/update client credentials %s ke database", clientCredential.ClientID), err)
+		return err
+	}
+
+	logger.Debug(fmt.Sprintf("Berhasil sinkronisasi client credentials %s ke database.", clientCredential.ClientID))
+	return nil
+}

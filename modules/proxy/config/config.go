@@ -13,9 +13,19 @@ type ModuleConfig struct {
 	ResourceUseMasterToken []string                   `mapstructure:"use_master_token" json:"use_master_token"`
 	FhirSource             FhirSource                 `mapstructure:"source" json:"source"`
 	Kafka                  config.KafkaConfig         `mapstructure:"kafka" json:"kafka"`
+	Cron                   CronConfig                 `mapstructru:"cron" json:"cron"`
+	Ildki                  IldkiConfig                `mapstructure:"hapi" json:"json"`
 }
 
 type SatusehatPropagationConfig struct {
+}
+
+type IldkiConfig struct {
+	Enabled        bool   `mapstructure:"enabled" json:"enabled"`
+	DevAuthURL     string `mapstructure:"development_authurl" json:"development_authurl"`
+	ProdAuthURL    string `mapstructure:"production_authurl" json:"production_authurl"`
+	ProductionURL  string `mapstructure:"production_url" json:"production_url"`
+	DevelopmentURL string `mapstructure:"development_url" json:"development_url"`
 }
 
 type FhirSource struct {
@@ -23,12 +33,18 @@ type FhirSource struct {
 	Header   string `mapstructure:"header" json:"header"`
 }
 
+type CronConfig struct {
+	Enabled  bool   `mapstructure:"enabled" json:"enabled"`
+	Schedule string `mapstructure:"schedule" json:"schedule"`
+}
+
 func (c *ModuleConfig) SetEnvBindings() map[string]string {
 	return map[string]string{
-		"module.fhir.ildki.enabled":         "MODULE_FHIR_ILDKI_ENABLED",
-		"module.fhir.ildki.production_url":  "MODULE_FHIR_ILDKI_PRODUCTION_URL",
-		"module.fhir.ildki.development_url": "MODULE_FHIR_ILDKI_DEVELOPMENT_URL",
-		"module.fhir.ildki.authurl":         "MODULE_FHIR_ILDKI_AUTH_URL",
+		"module.fhir.ildki.enabled":             "MODULE_FHIR_ILDKI_ENABLED",
+		"module.fhir.ildki.production_url":      "MODULE_FHIR_ILDKI_PRODUCTION_URL",
+		"module.fhir.ildki.development_url":     "MODULE_FHIR_ILDKI_DEVELOPMENT_URL",
+		"module.fhir.ildki.development_authurl": "MODULE_FHIR_ILDKI_DEVELOPMENT_AUTHURL",
+		"module.fhir.ildki.production_authurl":  "MODULE_FHIR_ILDKI_PRODUCTION_AUTHURL",
 
 		"module.fhir.production.baseurl":       "MODULE_FHIR_PRODUCTION_BASEURL",
 		"module.fhir.production.authurl":       "MODULE_FHIR_PRODUCTION_AUTHURL",
@@ -56,15 +72,18 @@ func (c *ModuleConfig) SetEnvBindings() map[string]string {
 		"kafka.group":   "KAFKA_GROUP_ID",
 		"kafka.offset":  "KAFKA_AUTO_OFFSET_RESET",
 		"kafka.topics":  "KAFKA_TOPICS",
+		"cron.enabled":  "CRON_ENABLED",
+		"cron.schedule": "CRON_SCHEDULE",
 	}
 }
 
 func (c *ModuleConfig) SetDefaults() map[string]any {
 	return map[string]any{
-		"module.fhir.hapi.enabled":         true,
-		"module.fhir.hapi.production_url":  "https://api.ildki.appgo.my.id/prod/fhir/r4/v1",
-		"module.fhir.hapi.development_url": "https://api.ildki.appgo.my.id/dev/fhir/r4/v1",
-		"module.fhir.hapi.authurl":         "https://api.ildki.appgo.my.id/oauth2/v1/accesstoken?grant_type=client_credentials",
+		"module.fhir.hapi.enabled":             true,
+		"module.fhir.hapi.production_url":      "https://api.ildki.appgo.my.id/prod/fhir/r4/v1",
+		"module.fhir.hapi.development_url":     "https://api.ildki.appgo.my.id/dev/fhir/r4/v1",
+		"module.fhir.hapi.development_authurl": "https://api.ildki.appgo.my.id/dev/oauth2/v1/accesstoken?grant_type=client_credentials",
+		"module.fhir.hapi.production_authurl":  "https://api.ildki.appgo.my.id/prod/oauth2/v1/accesstoken?grant_type=client_credentials",
 
 		"module.fhir.production.baseurl":       "https://api-satusehat.kemkes.go.id/fhir-r4/v1",
 		"module.fhir.production.authurl":       "https://api-satusehat.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials",
@@ -83,6 +102,8 @@ func (c *ModuleConfig) SetDefaults() map[string]any {
 
 		"module.fhir.source.priority": "satusehat-first",
 		"module.fhir.source.header":   "X-FHIR-Source-Priority",
+		"cron.enabled":                true,
+		"cron.schedule":               "59 23 * * *",
 	}
 }
 

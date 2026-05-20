@@ -111,27 +111,29 @@ func (m *Module) Init(ctx *core.AppContext) error {
 	m.registerStandardRoutes(ctx.Root)
 	m.registerFhirRoutes(ctx.Web)
 
-	// Inisiai CronJob
-	cronLoader, err := core.Instance().Context.GetDefaultLibraryLoader("cron")
+	if m.config.Cron.Enabled {
+		// Inisiai CronJob
+		cronLoader, err := core.Instance().Context.GetDefaultLibraryLoader("cron")
 
-	if err != nil {
-		return fmt.Errorf("Gagal memuat instance cronLoader")
-	}
-	cronLib, err := core.Instance().Context.LoadSingletonInstance(cronLoader)
+		if err != nil {
+			return fmt.Errorf("Gagal memuat instance cronLoader")
+		}
+		cronLib, err := core.Instance().Context.LoadSingletonInstance(cronLoader)
 
-	if err != nil {
-		return fmt.Errorf("Gagal Load CronLib")
-	}
-	m.cron = cronLib.(*cron.CronLibrary)
+		if err != nil {
+			return fmt.Errorf("Gagal Load CronLib")
+		}
+		m.cron = cronLib.(*cron.CronLibrary)
 
-	if err := m.cron.Connect(); err != nil {
-		logger.ErrorJson("Gagal Menjalankan Cron", err)
-	}
+		if err := m.cron.Connect(); err != nil {
+			logger.ErrorJson("Gagal Menjalankan Cron", err)
+		}
 
-	if _, err := m.cron.AddFunc("*/1 * * * *", func() {
-		m.taskService.ProcessRetryTasks()
-	}); err != nil {
-		logger.ErrorJson("Error Menambahkan Cronjob", err)
+		if _, err := m.cron.AddFunc(m.config.Cron.Schedule, func() {
+			m.taskService.ProcessRetryTasks()
+		}); err != nil {
+			logger.ErrorJson("Error Menambahkan Cronjob", err)
+		}
 	}
 
 	// These can be accessed through the central registry
@@ -172,6 +174,13 @@ func (m *Module) Repositories() map[string]any {
 func (m *Module) registerStandardRoutes(root fiber.Router) {
 	// Module routes
 	moduleRoot := root.Group("/" + m.Name())
+
+	m.routes = core.AppendRouteToArray(m.routes, &core.ModuleRoute{
+		Method:  "POST",
+		Path:    "/oauth/:env",
+		Handler: m.handler.GenerateToken,
+		Root:    moduleRoot,
+	})
 
 	// Module-specific routes
 	m.routes = core.AppendRouteToArray(m.routes, &core.ModuleRoute{
