@@ -207,7 +207,7 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 
 	bodyBytes, _ := io.ReadAll(response.Body)
 
-	if response.StatusCode != http.StatusOK {
+	if response.StatusCode != fiber.StatusOK && response.StatusCode != fiber.StatusCreated {
 		if target == "hapi" {
 			logger.Warn(fmt.Sprintf("HAPI returned status %d, falling back to SATUSEHAT", response.StatusCode))
 			return s.GenerateToken(env, "satusehat", clientId, clientSecret)
