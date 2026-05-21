@@ -21,6 +21,7 @@ type SatusehatPropagationConfig struct {
 }
 
 type IldkiConfig struct {
+	Faskes         string `mapstructure:"faskes_id" json:"faskes_id"`
 	Enabled        bool   `mapstructure:"enabled" json:"enabled"`
 	DevAuthURL     string `mapstructure:"development_authurl" json:"development_authurl"`
 	ProdAuthURL    string `mapstructure:"production_authurl" json:"production_authurl"`

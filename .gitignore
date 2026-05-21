@@ -5,5 +5,6 @@ access.yaml
 libraries/*
 modules/*
 go/*
+modules/proxy/certs/*
 !modules/proxy
 */.DS_Store
