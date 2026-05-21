@@ -50,6 +50,11 @@ type SatuSehatTokenResponse struct {
 	Status                string   `json:"status"`
 }
 
+type TokenType struct {
+	Env         string `json:"env"`
+	AccessToken string `json:"access_token"`
+}
+
 func (r *TransactionError) ToEntity() *entity.Transactions {
 	return &entity.Transactions{
 		ID:           r.ID,
