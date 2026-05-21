@@ -133,3 +133,35 @@ func (r *ProxyRepository) SaveClientCredentials(clientCredential *entity.ClinetC
 	logger.Debug(fmt.Sprintf("Berhasil sinkronisasi client credentials %s ke database.", clientCredential.ClientID))
 	return nil
 }
+
+func (r *ProxyRepository) GetToken() map[string]string {
+	tokens := map[string]string{}
+
+	var clientId string
+	var credential []entity.ClinetCredential
+
+	logger.Info(fmt.Sprintf("Ambil token dari client_id: %s", clientId))
+	// Find
+	filter := []port.DbExpression{
+		{
+			Expr: "(client_id = ? OR client_id = ?)",
+			Args: []any{r.Config.Development.ClientID, r.Config.Production.ClientID},
+		},
+	}
+	sort := map[string]int{"created_at": 1}
+
+	err := r.Connection.Find(r.Context.Context, &credential, entity.ClinetCredential{}.TableName(), []string{"*"}, filter, sort, 2, 0)
+
+	if err != nil {
+		logger.DebugJson("Gagal Ambil Token", err.Error())
+		return tokens
+	}
+
+	for _, cred := range credential {
+		if _, ok := tokens[cred.Env]; !ok {
+			tokens[cred.Env] = cred.AccessToken
+		}
+	}
+
+	return tokens
+}

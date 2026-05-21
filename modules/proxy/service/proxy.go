@@ -16,7 +16,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/nersus15/mini-proxy/mod-proxy/config"
-	types2 "github.com/nersus15/mini-proxy/mod-proxy/helper"
+	types2 "github.com/nersus15/mini-proxy/mod-proxy/helper/types"
 	"github.com/nersus15/mini-proxy/mod-proxy/repository"
 	"github.com/samply/golang-fhir-models/fhir-models/fhir"
 	"github.com/semanggilab/lib-go-fhir/helper/types"
@@ -225,10 +225,49 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 	}
 
 	logger.InfoJson("ClientCredential Dari "+target, satsetRes)
+
+	if target == "satusehat" {
+		s.SendCredentialToProxyIL(env, &satsetRes)
+	}
 	return satsetRes, errcode, errstr
 }
 
-func (s *ProxyService) SendCredentialToProxyIL() {}
+func (s *ProxyService) SendCredentialToProxyIL(env string, credential *types2.SatuSehatTokenResponse) {
+	logger.Info("Send Credential To ILDKI In Background Process")
+
+	go func() {
+		body, err := json.Marshal(credential)
+		if err != nil {
+			logger.DebugJson("Failed To Marshal Credential", err)
+			return
+		}
+
+		ur, err := url.Parse(s.Config.Hapi.DevelopmentURL)
+		endpoint := fmt.Sprintf("%s/%s/credential", ur.Hostname(), env)
+
+		logger.Info(fmt.Sprintf("Sending Credential To %s", endpoint))
+
+		req, err := http.NewRequest("POST", endpoint, strings.NewReader(string(body)))
+
+		if err != nil {
+			logger.DebugJson("Failed To Create Request", err)
+			return
+		}
+		req.Header.Add("Content-Type", "application/json")
+
+		response, err := s.httpClient(&env).Do(req)
+		if err != nil {
+			logger.DebugJson("Request Error", err)
+			return
+		}
+		defer response.Body.Close()
+
+		if response.StatusCode == fiber.StatusOK {
+			logger.Info("Successfully To Sent Credential To ILDKI")
+		}
+
+	}()
+}
 
 func (s *ProxyService) SaveCredential(env string, credential *types2.SatuSehatTokenResponse) {
 	logger.Info("Save User Credential In Background Process")

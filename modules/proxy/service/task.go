@@ -32,10 +32,28 @@ func (s *TaskService) ProcessRetryTasks() {
 	}
 
 	logger.Info("Available Task", len(tasks))
+	// Get Token Yang Terbaru
+	newTokens := s.Repository.GetToken()
+	logger.InfoJson("Token Yang Akan Digunakan", newTokens)
+
 	for i := range tasks {
 		fmt.Printf("Processing Task ID: %s (Retry: %d)\n", tasks[i].ID, tasks[i].RetryCount)
-		errMsg := s.executeAction(tasks[i])
+		var payload map[string]json.RawMessage
+		if err := json.Unmarshal(tasks[i].Payload, &payload); err != nil {
+			panic(err)
+		}
 
+		env := tasks[i].Env
+		if _, ok := newTokens[env]; ok {
+			newAuthorization, _ := json.Marshal(newTokens[env])
+			payload["authorization"] = newAuthorization
+		}
+		tasks[i].Payload, err = json.Marshal(payload)
+		if err != nil {
+			logger.ErrorJson("Gagal Marshall Payload", err)
+		}
+
+		errMsg := s.executeAction(tasks[i])
 		if errMsg == "" {
 			tasks[i].Status = "COMPLETED"
 			tasks[i].ErrorMessage = ""
@@ -60,6 +78,10 @@ func (s *TaskService) ProcessRetryTasks() {
 
 func (s *TaskService) executeAction(task entity.Transactions) string {
 	// Logika pengiriman data sebenarnya di sini
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(task.Payload, &payload); err != nil {
+		panic(err)
+	}
 	logger.InfoJson("MenjalankanTask", map[string]any{
 		"id":          task.ID,
 		"resouceType": task.ResourceType,
@@ -69,6 +91,7 @@ func (s *TaskService) executeAction(task entity.Transactions) string {
 		"createdAt":   task.CreatedAt,
 		"updatedAt":   task.UpdatedAt,
 		"env":         task.Env,
+		"Auth":        payload["authorization"],
 	})
 
 	body, _ := json.Marshal(task.Payload)
