@@ -48,7 +48,7 @@ RUN go work sync
 RUN CGO_ENABLED=1 GOOS=linux go build -o /app/main /app/webcore/main.go
 
 # Build the migrate tool
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/migrate webcore/init/migrate.go
+RUN CGO_ENABLED=1 GOOS=linux go build -o /app/migrate webcore/init/migrate.go
 
 
 ## PRODUCTION STAGE
