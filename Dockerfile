@@ -79,10 +79,13 @@ COPY --from=builder /app/migrate /usr/local/bin/migrate
 # Copy configuration files
 COPY --from=builder /app/config.yaml.example ./config.yaml
 COPY --from=builder /app/access.yaml.example ./access.yaml
-COPY --from=builder /app/webcore/init .
+COPY --from=builder /app/webcore/init/migrations ./webcore/init/migrations
+
+RUN mkdir -p /var/sqlite/
 
 # Set ownership of working directory to webcore user
 RUN chown -R webcore:webcore /app
+RUN chown -R webcore:webcore /var/sqlite
 
 # Switch to webcore user
 USER webcore
