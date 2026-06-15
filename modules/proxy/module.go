@@ -10,9 +10,7 @@ import (
 	"github.com/nersus15/mini-proxy/mod-proxy/config"
 	"github.com/nersus15/mini-proxy/mod-proxy/handler"
 	"github.com/nersus15/mini-proxy/mod-proxy/repository"
-	service2 "github.com/nersus15/mini-proxy/mod-proxy/service"
-	repository2 "github.com/semanggilab/lib-go-fhir/repository"
-	"github.com/semanggilab/lib-go-fhir/service"
+	"github.com/nersus15/mini-proxy/mod-proxy/service"
 	kafka "github.com/webcore-go/lib-kafka"
 	"github.com/webcore-go/webcore/app/core"
 	appConfig "github.com/webcore-go/webcore/infra/config"
@@ -28,16 +26,14 @@ const (
 // Module implements the module.Module interface
 type Module struct {
 	config      *config.ModuleConfig
-	service     *service2.ProxyService
-	authService *service2.AuthDbService
-	fhirService *service.FhirTransactionService
+	service     *service.ProxyService
 	repository  *repository.ProxyRepository
 	handler     *handler.HttpHandler
 	routes      []*core.ModuleRoute
 	memory      port.ICacheMemory
 	kafka       *kafka.KafkaProducer
 	cron        *cron.CronLibrary
-	taskService *service2.TaskService
+	taskService *service.TaskService
 }
 
 // NewModule creates a new Module instance
@@ -71,7 +67,7 @@ func (m *Module) Init(ctx *core.AppContext) error {
 	// Register services and repositories
 	libMem, ok := core.Instance().Context.GetDefaultSingletonInstance("cache:memory")
 	if !ok {
-		return fmt.Errorf("Gagal memuat instance database")
+		return fmt.Errorf("Gagal memuat instance Memory")
 	}
 
 	m.memory = libMem.(port.ICacheMemory)
@@ -83,10 +79,16 @@ func (m *Module) Init(ctx *core.AppContext) error {
 	}
 
 	db := lib.(port.IDatabase)
-	fhirConfig := m.config.ToFhirConfig()
-	fhirRepo := repository2.NewFhirRepository(ctx, fhirConfig, db)
+
+	migrationDir := fmt.Sprintf("webcore/init/migrations/proxy/%s", ctx.Config.Database.Driver)
 
 	m.repository = repository.NewProxyRepository(ctx, m.config, db)
+
+	err := m.repository.StartMigration(db.GetConnection(), ctx.Config.Database.Driver, "miniproxy", "up", migrationDir, nil)
+	if err != nil {
+		// Jika Goose gagal berjalan
+		return fmt.Errorf("Gagal menjalankan migrasi otomatis: %s", err)
+	}
 
 	if m.config.Kafka.Enabled {
 		loader, err := core.Instance().Context.GetDefaultLibraryLoader("kafka:producer")
@@ -101,11 +103,9 @@ func (m *Module) Init(ctx *core.AppContext) error {
 		m.kafka = libKafka.(*kafka.KafkaProducer)
 	}
 
-	m.service = service2.NewProxyService(ctx, m.config, m.repository, m.kafka)
-	m.fhirService = service.NewFhirTransactionService(ctx, fhirConfig, fhirRepo, m.memory)
-	m.authService = service2.NewAuthDbService(ctx, m.config, m.fhirService)
+	m.service = service.NewProxyService(ctx, m.config, m.repository, m.kafka)
 	m.handler = handler.NewHandler(ctx, m.config, m.service)
-	m.taskService = service2.NewTaskService(m.repository, m.service)
+	m.taskService = service.NewTaskService(m.repository, m.service, m.config)
 
 	// Register routes
 	m.registerStandardRoutes(ctx.Root)
@@ -130,7 +130,14 @@ func (m *Module) Init(ctx *core.AppContext) error {
 		}
 
 		if _, err := m.cron.AddFunc(m.config.Cron.Schedule, func() {
-			m.taskService.ProcessRetryTasks()
+			m.taskService.ProcessRetryTasks(nil)
+		}); err != nil {
+			logger.ErrorJson("Error Menambahkan Cronjob", err)
+		}
+
+		// CronJob Untuk Credential
+		if _, err := m.cron.AddFunc("*/5 * * * *", func() {
+			m.taskService.SyncCredential()
 		}); err != nil {
 			logger.ErrorJson("Error Menambahkan Cronjob", err)
 		}

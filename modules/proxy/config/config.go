@@ -1,32 +1,41 @@
 package config
 
 import (
-	config2 "github.com/semanggilab/lib-go-fhir/config"
 	"github.com/webcore-go/webcore/infra/config"
 )
 
 type ModuleConfig struct {
-	Hapi                   config2.HapiConfig         `mapstructure:"hapi" json:"hapi"`
-	Production             config2.SatuSehatConfig    `mapstructure:"production" json:"production"`
-	Development            config2.SatuSehatConfig    `mapstructure:"development" json:"development"`
 	Propagation            SatusehatPropagationConfig `mapstructure:"propagation" json:"propagation"`
 	ResourceUseMasterToken []string                   `mapstructure:"use_master_token" json:"use_master_token"`
 	FhirSource             FhirSource                 `mapstructure:"source" json:"source"`
 	Kafka                  config.KafkaConfig         `mapstructure:"kafka" json:"kafka"`
 	Cron                   CronConfig                 `mapstructure:"cron" json:"cron"`
 	Ildki                  IldkiConfig                `mapstructure:"ildki" json:"ildki"`
+	SatSetDev              SatusehatConfig            `mapstructure:"satusehat_dev" json:"satusehat_dev"`
+	SatSetProd             SatusehatConfig            `mapstructure:"satusehat_prod" json:"satusehat_prod"`
 }
 
 type SatusehatPropagationConfig struct {
 }
 
+type SatusehatConfig struct {
+	BaseURL      string `mapstructure:"baseurl" json:"baseurl"`
+	AuthURL      string `mapstructure:"authurl" json:"authurl"`
+	ClientID     string `mapstructure:"client_id" json:"client_id"`
+	ClientSecret string `mapstructure:"client_secret" json:"client_secret"`
+	HttpProxy    string `mapstructure:"http_proxy"`
+}
+
 type IldkiConfig struct {
 	Faskes         string `mapstructure:"faskes_id" json:"faskes_id"`
 	Enabled        bool   `mapstructure:"enabled" json:"enabled"`
-	DevAuthURL     string `mapstructure:"development_authurl" json:"development_authurl"`
-	ProdAuthURL    string `mapstructure:"production_authurl" json:"production_authurl"`
 	ProductionURL  string `mapstructure:"production_url" json:"production_url"`
 	DevelopmentURL string `mapstructure:"development_url" json:"development_url"`
+	DevAuthUrl     string `mapstructure:"dev_authurl" json:"dev_authurl"`
+	ProdAuthUrl    string `mapstructure:"prod_authurl" json:"prod_authurl"`
+	BackupBaseUrl  string `mapstructure:"backup_baseurl" json:"backup_baseurl"`
+	ZeroTrust      bool   `mapstructure:"zero_trust" json:"zero_trust"`
+	HttpProxy      string `mapstructure:"http_proxy" json:"http_proxy"`
 }
 
 type FhirSource struct {
@@ -35,8 +44,10 @@ type FhirSource struct {
 }
 
 type CronConfig struct {
-	Enabled  bool   `mapstructure:"enabled" json:"enabled"`
-	Schedule string `mapstructure:"schedule" json:"schedule"`
+	Enabled     bool   `mapstructure:"enabled" json:"enabled"`
+	Schedule    string `mapstructure:"schedule" json:"schedule"`
+	ChunkSize   int64  `mapstructure:"backup_chunksize" json:"backup_chunksize"`
+	BackupLimit int64  `mapstructure:"backup_limit" json:"backup_limit"`
 }
 
 func (c *ModuleConfig) SetEnvBindings() map[string]string {
@@ -46,24 +57,20 @@ func (c *ModuleConfig) SetEnvBindings() map[string]string {
 		"module.fhir.ildki.development_url":     "MODULE_FHIR_ILDKI_DEVELOPMENT_URL",
 		"module.fhir.ildki.development_authurl": "MODULE_FHIR_ILDKI_DEVELOPMENT_AUTHURL",
 		"module.fhir.ildki.production_authurl":  "MODULE_FHIR_ILDKI_PRODUCTION_AUTHURL",
+		"module.fhir.ildki.zero_trust":          "MODULE_FHIR_ILDKI_ZERO_TRUST",
+		"module.fhir.ildki.backup_baseurl":      "MODULE_FHIR_ILDKI_BACKUP_BASEURL",
 
-		"module.fhir.hapi.enabled":             "MODULE_FHIR_ILDKI_ENABLED",
-		"module.fhir.hapi.production_url":      "MODULE_FHIR_ILDKI_PRODUCTION_URL",
-		"module.fhir.hapi.development_url":     "MODULE_FHIR_ILDKI_DEVELOPMENT_URL",
-		"module.fhir.hapi.development_authurl": "MODULE_FHIR_ILDKI_DEVELOPMENT_AUTHURL",
-		"module.fhir.hapi.production_authurl":  "MODULE_FHIR_ILDKI_PRODUCTION_AUTHURL",
+		"module.fhir.satusehat_prod.baseurl":       "MODULE_FHIR_PRODUCTION_BASEURL",
+		"module.fhir.satusehat_prod.authurl":       "MODULE_FHIR_PRODUCTION_AUTHURL",
+		"module.fhir.satusehat_prod.client_id":     "MODULE_FHIR_PRODUCTION_CLIENT_ID",
+		"module.fhir.satusehat_prod.client_secret": "MODULE_FHIR_PRODUCTION_CLIENT_SECRET",
+		"module.fhir.satusehat_prod.http_proxy":    "MODULE_FHIR_PRODUCTION_HTTP_PROXY",
 
-		"module.fhir.production.baseurl":       "MODULE_FHIR_PRODUCTION_BASEURL",
-		"module.fhir.production.authurl":       "MODULE_FHIR_PRODUCTION_AUTHURL",
-		"module.fhir.production.client_id":     "MODULE_FHIR_PRODUCTION_CLIENT_ID",
-		"module.fhir.production.client_secret": "MODULE_FHIR_PRODUCTION_CLIENT_SECRET",
-		"module.fhir.production.http_proxy":    "MODULE_FHIR_PRODUCTION_HTTP_PROXY",
-
-		"module.fhir.development.baseurl":       "MODULE_FHIR_DEVELOPMENT_BASEURL",
-		"module.fhir.development.authurl":       "MODULE_FHIR_DEVELOPMENT_AUTHURL",
-		"module.fhir.development.client_id":     "MODULE_FHIR_DEVELOPMENT_CLIENT_ID",
-		"module.fhir.development.client_secret": "MODULE_FHIR_DEVELOPMENT_CLIENT_SECRET",
-		"module.fhir.development.http_proxy":    "MODULE_FHIR_DEVELOPMENT_HTTP_PROXY",
+		"module.fhir.satusehat_dev.baseurl":       "MODULE_FHIR_DEVELOPMENT_BASEURL",
+		"module.fhir.satusehat_dev.authurl":       "MODULE_FHIR_DEVELOPMENT_AUTHURL",
+		"module.fhir.satusehat_dev.client_id":     "MODULE_FHIR_DEVELOPMENT_CLIENT_ID",
+		"module.fhir.satusehat_dev.client_secret": "MODULE_FHIR_DEVELOPMENT_CLIENT_SECRET",
+		"module.fhir.satusehat_dev.http_proxy":    "MODULE_FHIR_DEVELOPMENT_HTTP_PROXY",
 
 		"module.fhir.use_master_token": "MODULE_FHIR_RESOURCE_USE_MASTER_TOKEN",
 
@@ -81,8 +88,10 @@ func (c *ModuleConfig) SetEnvBindings() map[string]string {
 		"kafka.topics":  "KAFKA_TOPICS",
 
 		// CRON
-		"module.fhir.cron.enabled":  "CRON_ENABLED",
-		"module.fhir.cron.schedule": "CRON_SCHEDULE",
+		"module.fhir.cron.enabled":          "CRON_ENABLED",
+		"module.fhir.cron.schedule":         "CRON_SCHEDULE",
+		"module.fhir.cron.backup_chunksize": "CRON_BACKUP_CHUNKSIZE",
+		"module.fhir.cron.backup_limit":     "CRON_BACKUP_LIMIT",
 	}
 }
 
@@ -93,26 +102,30 @@ func (c *ModuleConfig) SetDefaults() map[string]any {
 		"module.fhir.ildki.development_url":     "https://api.ildki.appgo.my.id/dev/fhir/r4/v1",
 		"module.fhir.ildki.development_authurl": "https://api.ildki.appgo.my.id/dev/oauth2/v1/accesstoken?grant_type=client_credentials",
 		"module.fhir.ildki.production_authurl":  "https://api.ildki.appgo.my.id/prod/oauth2/v1/accesstoken?grant_type=client_credentials",
+		"module.fhir.ildki.zero_trust":          false,
+		"module.fhir.ildki.backup_baseurl":      "https://api-debug.ildki.appgo.my.id",
 
-		"module.fhir.production.baseurl":       "https://api-satusehat.kemkes.go.id/fhir-r4/v1",
-		"module.fhir.production.authurl":       "https://api-satusehat.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials",
-		"module.fhir.production.client_id":     "your-production-client-id",
-		"module.fhir.production.client_secret": "your-production-client-secret",
+		"module.fhir.satusehat_prod.baseurl":       "https://api-satusehat.kemkes.go.id/fhir-r4/v1",
+		"module.fhir.satusehat_prod.authurl":       "https://api-satusehat.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials",
+		"module.fhir.satusehat_prod.client_id":     "your-production-client-id",
+		"module.fhir.satusehat_prod.client_secret": "your-production-client-secret",
 
-		"module.fhir.development.baseurl":       "https://api-satusehat-stg.dto.kemkes.go.id/fhir-r4/v1",
-		"module.fhir.development.authurl":       "https://api-satusehat-stg.dto.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials",
-		"module.fhir.development.client_id":     "your-development-client-id",
-		"module.fhir.development.client_secret": "your-development-client-secret",
+		"module.fhir.satusehat_dev.baseurl":       "https://api-satusehat-stg.dto.kemkes.go.id/fhir-r4/v1",
+		"module.fhir.satusehat_dev.authurl":       "https://api-satusehat-stg.dto.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials",
+		"module.fhir.satusehat_dev.client_id":     "your-development-client-id",
+		"module.fhir.satusehat_dev.client_secret": "your-development-client-secret",
 
 		"module.fhir.use_master_token": []string{},
 
 		"module.fhir.propagation.auto":   false,
 		"module.fhir.propagation.header": "X-Propagation-Strategy", // pilihan ['satusehat-failover', 'local-only']
 
-		"module.fhir.source.priority": "satusehat-first",
-		"module.fhir.source.header":   "X-FHIR-Source-Priority",
-		"module.fhir.cron.enabled":    true,
-		"module.fhir.cron.schedule":   "59 23 * * *",
+		"module.fhir.source.priority":       "satusehat-first",
+		"module.fhir.source.header":         "X-FHIR-Source-Priority",
+		"module.fhir.cron.enabled":          true,
+		"module.fhir.cron.schedule":         "*/10 23 * * *",
+		"module.fhir.cron.backup_chunksize": 100,
+		"module.fhir.cron.backup_limit":     5,
 	}
 
 	// tambahkan key hapi dengan value sama persis dari ildki
@@ -123,15 +136,4 @@ func (c *ModuleConfig) SetDefaults() map[string]any {
 	data["module.fhir.hapi.development_authurl"] = data["module.fhir.ildki.development_authurl"]
 
 	return data
-}
-
-func (c *ModuleConfig) ToFhirConfig() *config2.FhirTransactionConfig {
-	config := config2.FhirTransactionConfig{
-		Hapi:                   c.Hapi,
-		Production:             c.Production,
-		Development:            c.Development,
-		ResourceUseMasterToken: c.ResourceUseMasterToken,
-	}
-
-	return &config
 }

@@ -3,8 +3,8 @@ package handler
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/nersus15/mini-proxy/mod-proxy/config"
+	"github.com/nersus15/mini-proxy/mod-proxy/helper/types"
 	"github.com/nersus15/mini-proxy/mod-proxy/service"
-	"github.com/semanggilab/lib-go-fhir/helper/types"
 	"github.com/webcore-go/webcore/app/core"
 	"github.com/webcore-go/webcore/app/out"
 	"github.com/webcore-go/webcore/infra/logger"
@@ -46,9 +46,10 @@ func (h *HttpHandler) GenerateToken(c *fiber.Ctx) error {
 	logger.InfoJson("Body", body)
 
 	// Panggil service (otomatis fallback hapi -> satusehat di dalam service)
-	clientCredential, errcode, errstr := h.proxyService.GenerateToken(env, "hapi", body.ClientId, body.ClientSecret)
+	clientCredential, errcode, errstr := h.proxyService.GenerateToken(env, "satusehat", body.ClientId, body.ClientSecret)
 
 	if errstr != "" {
+
 		return c.Status(fiber.StatusBadRequest).JSON(out.Error(
 			fiber.StatusBadRequest,
 			errcode,
@@ -67,19 +68,61 @@ func (h *HttpHandler) GenerateToken(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(clientCredential)
 }
 
+func (h *HttpHandler) GetResource(c *fiber.Ctx) error {
+	env := c.Params("env")
+	resourceType := c.Params("resourceType", "")
+	resourceId := c.Params("resourceId", "")
+	queryParams := c.Queries()
+
+	_, raw, errcode, errstr := h.proxyService.GetResource(env, resourceType, resourceId, queryParams, c)
+	if errstr != "" {
+		return c.Status(fiber.StatusBadRequest).JSON(out.Error(
+			fiber.StatusBadRequest,
+			errcode,
+			"GENERATED",
+			errstr,
+		))
+	}
+	return c.Status(fiber.StatusOK).JSON(raw)
+}
+
 func (h *HttpHandler) PostResource(c *fiber.Ctx) error {
 	env := c.Params("env")
 	resourceType := c.Params("resourceType", "")
 
 	var res *types.BaseResource
+	var raw any
 	var errcode int
 	var errstr string
 
-	if resourceType != "" {
-		res, _, errcode, errstr = h.proxyService.PostResource(env, resourceType, c)
-	} else {
-		res, _, errcode, errstr = h.proxyService.PostBundle(env, resourceType, c)
+	res, raw, errcode, errstr = h.proxyService.PostResource(env, resourceType, c)
+
+	// if resourceType != "" {
+	// 	res, raw, errcode, errstr = h.proxyService.PostResource(env, resourceType, c)
+	// } else {
+	// 	res, raw, errcode, errstr = h.proxyService.PostBundle(env, resourceType, c)
+	// }
+	if errstr != "" {
+		if *res.ResourceType == "OperationOutcome" {
+			return c.Status(fiber.StatusBadRequest).JSON(raw)
+		}
+
+		return c.Status(fiber.StatusBadRequest).JSON(out.Error(
+			fiber.StatusBadRequest,
+			errcode,
+			"GENERATED",
+			errstr,
+		))
 	}
+	return c.Status(fiber.StatusOK).JSON(raw)
+}
+
+func (h *HttpHandler) PutResource(c *fiber.Ctx) error {
+	env := c.Params("env")
+	resourceType := c.Params("resourceType", "")
+	resId := c.Params("resourceId", "")
+
+	_, raw, errcode, errstr := h.proxyService.PutResource(env, resourceType, resId, c)
 
 	if errstr != "" {
 		return c.Status(fiber.StatusBadRequest).JSON(out.Error(
@@ -90,21 +133,24 @@ func (h *HttpHandler) PostResource(c *fiber.Ctx) error {
 		))
 	}
 
-	return c.Status(fiber.StatusOK).JSON(res)
-}
-
-func (h *HttpHandler) GetResource(c *fiber.Ctx) error {
-	return nil
-}
-
-func (h *HttpHandler) PutResource(c *fiber.Ctx) error {
-	return nil
+	return c.Status(fiber.StatusOK).JSON(raw)
 }
 
 func (h *HttpHandler) PatchResource(c *fiber.Ctx) error {
-	return nil
-}
+	env := c.Params("env")
+	resourceType := c.Params("resourceType", "")
+	resId := c.Params("resourceId", "")
 
-func (h *HttpHandler) GetAccessToken(c *fiber.Ctx) error {
-	return nil
+	_, raw, errcode, errstr := h.proxyService.PatchResource(env, resourceType, resId, c)
+
+	if errstr != "" {
+		return c.Status(fiber.StatusBadRequest).JSON(out.Error(
+			fiber.StatusBadRequest,
+			errcode,
+			"GENERATED",
+			errstr,
+		))
+	}
+
+	return c.Status(fiber.StatusOK).JSON(raw)
 }

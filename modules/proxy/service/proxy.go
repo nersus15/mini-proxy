@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -17,13 +18,12 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/nersus15/mini-proxy/mod-proxy/config"
-	types2 "github.com/nersus15/mini-proxy/mod-proxy/helper/types"
+	"github.com/nersus15/mini-proxy/mod-proxy/helper/processor"
+	"github.com/nersus15/mini-proxy/mod-proxy/helper/types"
+	"github.com/nersus15/mini-proxy/mod-proxy/helper/utils"
 	utils2 "github.com/nersus15/mini-proxy/mod-proxy/helper/utils"
 	"github.com/nersus15/mini-proxy/mod-proxy/repository"
 	"github.com/samply/golang-fhir-models/fhir-models/fhir"
-	"github.com/semanggilab/lib-go-fhir/helper/types"
-	"github.com/semanggilab/lib-go-fhir/helper/utils"
-	"github.com/semanggilab/lib-go-fhir/processor"
 	kafka "github.com/webcore-go/lib-kafka"
 	"github.com/webcore-go/webcore/app/core"
 	"github.com/webcore-go/webcore/app/helper"
@@ -45,17 +45,43 @@ func NewProxyService(wctx *core.AppContext, cfg *config.ModuleConfig, repository
 		Context:        wctx,
 		Config:         cfg,
 		Repository:     repository,
-		DevHttpClient:  createHttpClient(cfg.Development.HttpProxy),
-		ProdHttpClient: createHttpClient(cfg.Development.HttpProxy),
+		DevHttpClient:  createHttpClient(cfg.Ildki.HttpProxy),
+		ProdHttpClient: createHttpClient(cfg.Ildki.HttpProxy),
 		kafka:          kafkaProducer,
 	}
 }
 
+func (s *ProxyService) GetResource(env string, resourceType string, resid string, params map[string]string, ctx *fiber.Ctx) (*types.BaseResource, any, int, string) {
+	auth := ctx.Get("Authorization")
+	mainUrl, _, priority := s.GetUrl(env, resourceType, ctx)
+	target, _ := s.GetTarget(priority)
+
+	if mainUrl == "" || mainUrl == "/" {
+		return nil, nil, 400, "priority must be 'local-first' or 'satusehat-first'"
+	}
+	if resid != "" {
+		mainUrl = mainUrl + "/" + resid
+	}
+
+	if len(params) > 0 {
+		mainUrl = fmt.Sprintf("%s?%s", mainUrl, queryParams(params))
+	}
+
+	logger.Info("Send GET Request Resource ==> ", "ENV", env, "Resource Type", resourceType, "Resource Id", resid, "Params: "+helper.ToLogJSON(params), "To", mainUrl)
+
+	res, raw, _, _, errcode, errstr := s.sendRequest("GET", mainUrl, env, target, auth, nil)
+	return res, raw, errcode, errstr
+}
+
 func (s *ProxyService) PostResource(env string, resourceType string, ctx *fiber.Ctx) (*types.BaseResource, any, int, string) {
 	auth := ctx.Get("Authorization")
-
+	noForward := []string{
+		"Patient",
+		"Location",
+		"Organization",
+	}
 	mainUrl, forwardUrl, priority := s.GetUrl(env, resourceType, ctx)
-	target, forward := s.GetTarget(priority)
+	target, _ := s.GetTarget(priority)
 
 	if (mainUrl == "" || mainUrl == "/") || (forwardUrl == "" || forwardUrl == "/") {
 		return nil, nil, 400, "priority must be 'local-first' or 'satusehat-first'"
@@ -63,27 +89,38 @@ func (s *ProxyService) PostResource(env string, resourceType string, ctx *fiber.
 
 	logger.Info("Send POST Request Resource ==> ", "ENV", env, "Resource Type", resourceType, "To", mainUrl, "Forward", forwardUrl)
 
-	resource, raw, errcode, errstr := s.sendRequest("POST", mainUrl, env, target, auth, ctx.Body())
+	resource, raw, _, httpResponse, errcode, errstr := s.sendRequest("POST", mainUrl, env, target, auth, ctx.Body())
 
-	if target == "hapi" {
+	if target == "ildki" {
 		// Jika local-first tidak perlu forwad request ke SatuSehat melalui mini proxy, karena sudah di handle oleh ILDKI
 		return resource, raw, 0, ""
 	}
-	if errcode == 0 && errstr == "" {
-		// Sebelum di forward tambahkan id nya, ambil dari response
-		newBody, err := json.Marshal(resource)
+	if errcode == 0 && errstr == "" && !slices.Contains(noForward, resourceType) {
+		var requestBodyJson interface{}
+		if errBody := json.Unmarshal(ctx.Body(), &requestBodyJson); errBody != nil {
+			// Jika bukan json valid, biarkan fallback ke string mentah
+			requestBodyJson = string(ctx.Body())
+		}
+
+		temp := forwardPayload(ctx.GetReqHeaders(), httpResponse, mainUrl, requestBodyJson, raw)
+		newBody, err := json.Marshal(temp)
+
 		if err != nil {
 			logger.Error("json.Marshal", helper.ToLogJSON(err))
 		} else {
 			// forward ke internal hapi via api (bukan kafka)
-			s.forwardRequest("PUT", forwardUrl, env, forward, auth, newBody)
+			hostname := getHostName(s.Config.Ildki.ProductionURL)
+
+			forwardUrl = fmt.Sprintf("https://%s/%s/backup", hostname, env)
+			s.forwardRequestToIldki("POST", forwardUrl, env, auth, resourceType, newBody)
+
 		}
 	}
 
-	return resource, raw, 0, ""
+	return resource, raw, errcode, errstr
 }
 
-func (s *ProxyService) PostBundle(env string, resourceType string, ctx *fiber.Ctx) (*types.BaseResource, any, int, string) {
+func (s *ProxyService) PutResource(env string, resourceType string, id string, ctx *fiber.Ctx) (*types.BaseResource, any, int, string) {
 	auth := ctx.Get("Authorization")
 
 	mainUrl, forwardUrl, priority := s.GetUrl(env, resourceType, ctx)
@@ -92,41 +129,47 @@ func (s *ProxyService) PostBundle(env string, resourceType string, ctx *fiber.Ct
 	if (mainUrl == "" || mainUrl == "/") || (forwardUrl == "" || forwardUrl == "/") {
 		return nil, nil, 400, "priority must be 'local-first' or 'satusehat-first'"
 	}
+	mainUrl += "/" + id
+	forwardUrl += "/" + id
+	logger.Info("Send PUT Request ==> ", "ENV", env, "Resource Type", resourceType, "To", mainUrl, "Forward", forwardUrl)
 
-	logger.Info("Send POST Request Bundle ==> ", "ENV", env, "Resource Type", resourceType, "To", mainUrl, "Forward", forwardUrl)
+	resource, raw, _, httpResponse, errcode, errstr := s.sendRequest("PUT", mainUrl, env, target, auth, ctx.Body())
 
-	resource, raw, errcode, errstr := s.sendRequest("POST", mainUrl, env, target, auth, ctx.Body())
-
-	if target == "hapi" {
+	if target == "ildki" {
 		// Jika local-first tidak perlu forwad request ke SatuSehat melalui mini proxy, karena sudah di handle oleh ILDKI
 		return resource, raw, 0, ""
 	}
+
 	if errcode == 0 && errstr == "" {
-		// Untuk Bundle Forwardnya harus ke kafka, karena jika melalui gateway ildki pasti akan error ketika kirim ke satusehat (duplikat), sehingga tidak diteruskan ke kafka
-		var input fhir.Bundle
-		err := ctx.BodyParser(&input)
-		if err != nil {
-			logger.ErrorJson("Gagal Parse Body", err)
-		}
-		var transactionId *string
-		xtransId := ctx.Get("X-Transaction-Id", "")
-		if xtransId != "" {
-			transactionId = helper.StringPtr(xtransId)
-		} else {
-			transactionId = helper.StringPtr(uuid.New().String())
+		var requestBodyJson interface{}
+		if errBody := json.Unmarshal(ctx.Body(), &requestBodyJson); errBody != nil {
+			// Jika bukan json valid, biarkan fallback ke string mentah
+			requestBodyJson = string(ctx.Body())
 		}
 
-		s.sendToKafka(transactionId, env, auth, input, resource, raw, "Bundle", nil)
+		temp := forwardPayload(ctx.GetReqHeaders(), httpResponse, mainUrl, requestBodyJson, raw)
+		newBody, err := json.Marshal(temp)
+
+		if err != nil {
+			logger.Error("json.Marshal", helper.ToLogJSON(err))
+		} else {
+			// forward ke internal hapi via api (bukan kafka)
+			hostname := getHostName(s.Config.Ildki.ProductionURL)
+
+			forwardUrl = fmt.Sprintf("https://%s/%s/backup", hostname, env)
+			s.forwardRequestToIldki("POST", forwardUrl, env, auth, resourceType, newBody)
+
+		}
 	}
 
-	return resource, raw, 0, ""
+	return resource, raw, errcode, errstr
 }
 
-func (s *ProxyService) PutResource(env string, resourceType string, id string, ctx *fiber.Ctx) (*types.BaseResource, any, int, string) {
+func (s *ProxyService) PatchResource(env string, resourceType string, id string, ctx *fiber.Ctx) (*types.BaseResource, any, int, string) {
 	auth := ctx.Get("Authorization")
 
 	mainUrl, forwardUrl, priority := s.GetUrl(env, resourceType, ctx)
-	target, forward := s.GetTarget(priority)
+	target, _ := s.GetTarget(priority)
 
 	if (mainUrl == "" || mainUrl == "/") || (forwardUrl == "" || forwardUrl == "/") {
 		return nil, nil, 400, "priority must be 'local-first' or 'satusehat-first'"
@@ -135,44 +178,56 @@ func (s *ProxyService) PutResource(env string, resourceType string, id string, c
 	forwardUrl += "/" + id
 	logger.Info("Send PUT Request ==> ", "ENV", env, "Resource Type", resourceType, "To", mainUrl, "Forward", forwardUrl)
 
-	resource, raw, errcode, errstr := s.sendRequest("PUT", mainUrl, env, target, auth, ctx.Body())
+	resource, raw, _, httpResponse, errcode, errstr := s.sendRequest("PATCH", mainUrl, env, target, auth, ctx.Body())
 
-	if target == "hapi" {
+	if target == "ildki" {
 		// Jika local-first tidak perlu forwad request ke SatuSehat melalui mini proxy, karena sudah di handle oleh ILDKI
-		return resource, raw, 0, ""
+		return resource, raw, errcode, errstr
 	}
 
 	if errcode == 0 && errstr == "" {
-		// Sebelum di forward tambahkan id nya, ambil dari response
-		newBody, err := json.Marshal(resource)
+		var requestBodyJson interface{}
+		if errBody := json.Unmarshal(ctx.Body(), &requestBodyJson); errBody != nil {
+			// Jika bukan json valid, biarkan fallback ke string mentah
+			requestBodyJson = string(ctx.Body())
+		}
+
+		temp := forwardPayload(ctx.GetReqHeaders(), httpResponse, mainUrl, requestBodyJson, raw)
+		newBody, err := json.Marshal(temp)
+
 		if err != nil {
 			logger.Error("json.Marshal", helper.ToLogJSON(err))
 		} else {
 			// forward ke internal hapi via api (bukan kafka)
-			s.forwardRequest("PUT", forwardUrl, env, forward, auth, newBody)
+			hostname := getHostName(s.Config.Ildki.ProductionURL)
+
+			forwardUrl = fmt.Sprintf("https://%s/%s/backup", hostname, env)
+			s.forwardRequestToIldki("POST", forwardUrl, env, auth, resourceType, newBody)
+
 		}
 	}
 
-	return resource, raw, 0, ""
+	return resource, raw, errcode, errstr
+
 }
 
-func (s *ProxyService) GenerateToken(env string, target string, clientId string, clientSecret string) (types2.SatuSehatTokenResponse, int, string) {
+func (s *ProxyService) GenerateToken(env string, target string, clientId string, clientSecret string) (types.SatuSehatTokenResponse, int, string) {
 	var endpoint string
 	var errstr string
 	var errcode int
-	var satsetRes types2.SatuSehatTokenResponse
+	var satsetRes types.SatuSehatTokenResponse
 
 	if env == "dev" {
-		if target == "hapi" {
-			endpoint = s.Config.Ildki.DevAuthURL
+		if target == "ildki" {
+			endpoint = s.Config.Ildki.DevAuthUrl
 		} else {
-			endpoint = s.Config.Development.AuthURL
+			endpoint = s.Config.SatSetDev.AuthURL
 		}
 	} else {
-		if target == "hapi" {
-			endpoint = s.Config.Ildki.ProdAuthURL
+		if target == "ildki" {
+			endpoint = s.Config.Ildki.ProductionURL
 		} else {
-			endpoint = s.Config.Production.AuthURL
+			endpoint = s.Config.SatSetProd.AuthURL
 		}
 	}
 	logger.Info("Request Token", "ENV", env, "Target", target, "Endpoint", endpoint)
@@ -186,7 +241,7 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 	req, err := http.NewRequest("POST", endpoint, payload)
 	if err != nil {
 		errcode = utils.ERR_SATUSEHAT_FORMAT
-		if target == "hapi" {
+		if target == "ildki" {
 			logger.Warn("Failed creating request to ILDKI, falling back to SATUSEHAT")
 			return s.GenerateToken(env, "satusehat", clientId, clientSecret)
 		}
@@ -194,7 +249,7 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 	}
 	req.Header.Add("content-type", "application/x-www-form-urlencoded")
 
-	if target == "hapi" {
+	if target == "ildki" && s.Config.Ildki.ZeroTrust {
 		errSign := utils2.AddSignatureToRequest(s.Config.Ildki.Faskes, req, []byte(dataEncode))
 		if errSign != nil {
 			logger.Error("Gagal menambahkan signature pada request", "Err", errSign.Error())
@@ -207,7 +262,7 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 		errcode, errstr = utils.HttpError("satusehat", req, nil, err)
 		logger.Error("Connection Error", "To", endpoint, "env", env, "Err", errstr, "code", errcode)
 
-		if target == "hapi" {
+		if target == "ildki" {
 			logger.Warn("Failed connecting to ILDKI, falling back to SATUSEHAT")
 			return s.GenerateToken(env, "satusehat", clientId, clientSecret)
 		}
@@ -218,7 +273,7 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 	bodyBytes, _ := io.ReadAll(response.Body)
 
 	if response.StatusCode != fiber.StatusOK && response.StatusCode != fiber.StatusCreated {
-		if target == "hapi" {
+		if target == "ildki" {
 			logger.Warn(fmt.Sprintf("HAPI returned status %d, falling back to SATUSEHAT", response.StatusCode))
 			return s.GenerateToken(env, "satusehat", clientId, clientSecret)
 		}
@@ -227,7 +282,7 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 
 	err = json.Unmarshal(bodyBytes, &satsetRes)
 	if err != nil {
-		if target == "hapi" {
+		if target == "ildki" {
 			logger.Warn("Failed to unmarshal ILDKI response, falling back to SATUSEHAT")
 			return s.GenerateToken(env, "satusehat", clientId, clientSecret)
 		}
@@ -242,7 +297,7 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 	return satsetRes, errcode, errstr
 }
 
-func (s *ProxyService) SendCredentialToProxyIL(env string, credential *types2.SatuSehatTokenResponse) {
+func (s *ProxyService) SendCredentialToProxyIL(env string, credential *types.SatuSehatTokenResponse) {
 	go func() {
 		logger.Info("Send Credential To ILDKI In Background Process")
 		body, err := json.Marshal(credential)
@@ -251,40 +306,52 @@ func (s *ProxyService) SendCredentialToProxyIL(env string, credential *types2.Sa
 			return
 		}
 
+		// Hapus Transaksi sebelumnya (where id != credential.AccessToken)
+		_, err = s.Repository.DeleteOldCredTransactions(credential.AccessToken)
+		if err != nil {
+			logger.ErrorJson("Gagal Hapus Transaction", err)
+		}
+
 		ur, err := url.Parse(s.Config.Ildki.DevelopmentURL)
-		endpoint := fmt.Sprintf("https://%s/%s/credential/sync", ur.Hostname(), env)
+		endpoint := fmt.Sprintf("https://%s/api/%s/credential/sync", ur.Hostname(), env)
 		logger.Info(fmt.Sprintf("Sending Credential To %s", endpoint))
 
 		req, err := http.NewRequest("POST", endpoint, bytes.NewReader(body))
 		if err != nil {
 			logger.DebugJson("Failed To Create Request", err)
+			s.saveErrorTransaction(credential.AccessToken, "forward", "credential", env, endpoint, "", body, err.Error())
 			return
 		}
 
-		errSign := utils2.AddSignatureToRequest(s.Config.Ildki.Faskes, req, body)
-		if errSign != nil {
-			logger.Error("Gagal menambahkan signature pada request", "Err", errSign.Error())
-			return
+		if s.Config.Ildki.ZeroTrust {
+			errSign := utils2.AddSignatureToRequest(s.Config.Ildki.Faskes, req, body)
+			if errSign != nil {
+				logger.Error("Gagal menambahkan signature pada request", "Err", errSign.Error())
+				s.saveErrorTransaction(credential.AccessToken, "forward", "credential", env, endpoint, "", body, errSign.Error())
+				return
+			}
 		}
 		req.Header.Add("Content-Type", "application/json")
 
 		response, err := s.httpClient(&env).Do(req)
 		if err != nil {
 			logger.DebugJson("Request Error", err)
+			s.saveErrorTransaction(credential.AccessToken, "forward", "credential", env, endpoint, "", body, err.Error())
 			return
 		}
 		defer response.Body.Close()
-			
+
 		if response.StatusCode == fiber.StatusOK || response.StatusCode == fiber.StatusCreated {
 			logger.Info("Successfully To Sent Credential To ILDKI")
-		}else{
+		} else {
+			s.saveErrorTransaction(credential.AccessToken, "forward", "credential", env, endpoint, "", body, "Response Error")
 			logger.ErrorJson("Failed To Sent Credential To ILDKI", response)
 		}
 
 	}()
 }
 
-func (s *ProxyService) SaveCredential(env string, credential *types2.SatuSehatTokenResponse) {
+func (s *ProxyService) SaveCredential(env string, credential *types.SatuSehatTokenResponse) {
 	logger.Info("Save User Credential In Background Process")
 	go func() {
 		entityData := credential.ToEntity()
@@ -324,30 +391,32 @@ func (s *ProxyService) SaveCredential(env string, credential *types2.SatuSehatTo
 	}()
 }
 
-func (s *ProxyService) sendRequest(method string, url string, env string, target string, auth string, body []byte) (*types.BaseResource, any, int, string) {
+func (s *ProxyService) sendRequest(method string, url string, env string, target string, auth string, body []byte) (*types.BaseResource, any, *http.Request, *http.Response, int, string) {
 	var errcode int
 	var errstr string
-	logger.Info("===== Forward Request di Background =====", "Method", method, "Url", url, "Env", env, "Target", target)
+	logger.Info("===== Send Request =====", "Method", method, "Url", url, "Env", env, "Target", target)
 
 	req, err := http.NewRequest(method, url, bytes.NewReader(body))
 	if err != nil {
 		errcode = utils.ERR_SATUSEHAT_FORMAT
-		if target == "hapi" {
+		if target == "ildki" {
 			errcode = utils.ERR_HAPI_FORMAT
 		}
 
-		return nil, nil, errcode, fmt.Sprintf("gagal membuat request: %s", err)
+		return nil, nil, req, nil, errcode, fmt.Sprintf("gagal membuat request: %s", err)
 	}
 	// Set Request Header
 	req.Header.Add("Authorization", auth)
 	req.Header.Add("content-type", "application/json")
 
-	if target == "hapi" {
+	if target == "ildki" {
 		req.Header.Add(s.Config.FhirSource.Header, "local-first")
-		errSign := utils2.AddSignatureToRequest(s.Config.Ildki.Faskes, req, body)
-		if errSign != nil {
-			logger.Error("Gagal menambahkan signature pada request", "Err", errSign.Error())
-			return nil, nil, 500, errSign.Error()
+		if s.Config.Ildki.ZeroTrust {
+			errSign := utils2.AddSignatureToRequest(s.Config.Ildki.Faskes, req, body)
+			if errSign != nil {
+				logger.Error("Gagal menambahkan signature pada request", "Err", errSign.Error())
+				return nil, nil, req, nil, 500, errSign.Error()
+			}
 		}
 	}
 
@@ -355,81 +424,92 @@ func (s *ProxyService) sendRequest(method string, url string, env string, target
 	if err != nil {
 		errcode, errstr = utils.HttpError(target, req, response, nil)
 
-		return nil, nil, errcode, errstr
+		return nil, nil, req, nil, errcode, errstr
 	}
 	defer response.Body.Close()
 
 	bodyBytes, _ := io.ReadAll(response.Body)
+	var rawResponse any
+	err1 := json.Unmarshal(bodyBytes, &rawResponse)
+
 	resource, err := processor.UnmarshalResource(bodyBytes, nil)
 	logger.InfoJson("Response "+url, resource)
+	logger.InfoJson("Raw Response "+url, rawResponse)
 
 	if err != nil {
 		errcode = utils.ERR_SATUSEHAT_FORMAT
-		if target == "hapi" {
+		if target == "ildki" {
 			errcode = utils.ERR_HAPI_FORMAT
 		}
-		return nil, nil, errcode, fmt.Sprintf("gagal mem-parsing JSON: %s", err)
+		return resource, rawResponse, req, response, errcode, fmt.Sprintf("gagal mem-parsing JSON: %s", err)
+	}
+
+	if err1 != nil {
+		rawResponse = resource
+		logger.InfoJson("Gagal Unmarshall Body", err1)
 	}
 
 	if resource.ResourceType == nil {
 		errcode = utils.ERR_SATUSEHAT_FORMAT
-		if target == "hapi" {
+		if target == "ildki" {
 			errcode = utils.ERR_HAPI_FORMAT
 		}
-		return nil, nil, errcode, "resourceType is nil"
+		return resource, rawResponse, req, response, errcode, "resourceType is Nul"
 	} else if *resource.ResourceType == "OperationOutcome" {
 		var oo fhir.OperationOutcome = resource.ResourceReal.(fhir.OperationOutcome)
 		if len(oo.Issue) > 0 && oo.Issue[0].Diagnostics != nil {
 			errcode, errstr = utils.OperationOutcomeError(target, *oo.Issue[0].Diagnostics)
-			return nil, resource, errcode, errstr
+			return resource, resource, req, response, errcode, errstr
 		} else {
 			errcode = utils.ERR_SATUSEHAT_UNDEFINED
-			if target == "hapi" {
+			if target == "ildki" {
 				errcode = utils.ERR_HAPI_UNDEFINED
 			}
-			return nil, resource, errcode, fmt.Sprintf("response OperationOutcome dari %s-%s: %s \n Detail: %s", target, env, helper.ToLogJSON(oo), helper.ToLogJSON(resource))
+			return resource, rawResponse, req, response, errcode, fmt.Sprintf("response OperationOutcome dari %s-%s: %s \n Detail: %s", target, env, helper.ToLogJSON(oo), helper.ToLogJSON(resource))
 		}
 	}
 
-	return resource, resource, 0, ""
+	return resource, rawResponse, req, response, 0, ""
 
 }
 
-/*
-*
-target disini adalah forwad
-*/
-func (s *ProxyService) forwardRequest(method string, url string, env string, target string, auth string, body []byte) {
+func (s *ProxyService) forwardRequestToIldki(method string, url string, env string, auth string, resourceType string, body []byte) {
 	go func() {
-		logger.Info("===== Forward Request di Background =====", "Method", method, "Url", url, "Env", env, "Target", target)
-		var bodyResource *types.BaseResource
-		err := json.Unmarshal(body, &bodyResource)
+		target := "ildki"
 
-		if err != nil {
+		logger.Info("===== Forward Request di Background =====", "Method", method, "Url", url, "Env", env)
+		var transactionId string
+		var patientId string
 
+		if resourceType == "" {
+			resourceType = "Bundle"
 		}
-		patientId := s.getFHIRPatientReference(bodyResource)
+
+		if resourceType != "Bundle" {
+			transactionId, patientId = s.ResourceTransactionDetail(resourceType, body)
+		} else {
+			transactionId, patientId = s.BundleTransactionDetail(resourceType, body)
+		}
 
 		var errcode int
 		var errstr string
 
 		req, err := http.NewRequest(method, url, bytes.NewReader(body))
 		if err != nil {
-			s.logForwardError(target, url, env, "gagal membuat request", err)
+			s.logForwardError(url, env, "gagal membuat request", err)
 			return
 		}
 
 		// Set Request Headers
 		req.Header.Add("Authorization", auth)
 		req.Header.Add("content-type", "application/json")
+		req.Header.Add(s.Config.FhirSource.Header, "backup-satusehat")
 
-		if target == "hapi" {
-			req.Header.Add(s.Config.FhirSource.Header, "local-first")
-
+		if s.Config.Ildki.ZeroTrust {
 			errSign := utils2.AddSignatureToRequest(s.Config.Ildki.Faskes, req, body)
 			if errSign != nil {
 				logger.Error("Gagal menambahkan signature pada request", "Err", errSign.Error())
-				s.saveErrorTransaction(*bodyResource.Id, "forward", *bodyResource.ResourceType, env, url, *patientId, body, errSign.Error())
+				s.saveErrorTransaction(transactionId, "forward", resourceType, env, url, patientId, body, errSign.Error())
 				return
 			}
 		}
@@ -439,201 +519,20 @@ func (s *ProxyService) forwardRequest(method string, url string, env string, tar
 			errcode, errstr = utils.HttpError(target, req, nil, err)
 			logger.Error("Forward Request Connection Error", "To", url, "env", env, "Err", errstr, "code", errcode)
 
-			s.saveErrorTransaction(*bodyResource.Id, "forward", *bodyResource.ResourceType, env, url, *patientId, body, errstr)
+			s.saveErrorTransaction(transactionId, "forward", resourceType, env, url, patientId, body, errstr)
 			return
 		}
 
 		defer response.Body.Close()
-
-		bodyBytes, err := io.ReadAll(response.Body)
-		if err != nil {
-			s.logForwardError(target, url, env, "gagal membaca response body", err)
-			return
-		}
-		base := map[string]any{}
-		err1 := json.Unmarshal(bodyBytes, &base)
-
-		if err1 != nil {
-			logger.Error("Error Marshal Response ", err1)
-		}
-
-		logger.InfoJson("Response Raw Forward Request", base)
 
 		if response.StatusCode != fiber.StatusOK && response.StatusCode != fiber.StatusCreated {
 			_, msg := utils.HttpError(target, req, response, nil)
-			s.saveErrorTransaction(*bodyResource.Id, "forward", *bodyResource.ResourceType, env, url, *patientId, body, msg)
+			s.saveErrorTransaction(transactionId, "forward", resourceType, env, url, patientId, body, msg)
 		}
-
-		resource, err := processor.UnmarshalResource(bodyBytes, nil)
-		if err != nil {
-			errcode = utils.ERR_SATUSEHAT_FORMAT
-			if target == "hapi" {
-				errcode = utils.ERR_HAPI_FORMAT
-			}
-			logger.Error("Forward Request Parsing Error", "To", url, "Err", err.Error(), "code", errcode)
-			return
-		}
-
-		// Logic check for OperationOutcome
-		if resource.ResourceType == nil {
-			logger.Error("Forward Request", "To", url, "Err", "resourceType is nil")
-		} else if *resource.ResourceType == "OperationOutcome" {
-			// Handle specific FHIR Error types
-			if oo, ok := resource.ResourceReal.(fhir.OperationOutcome); ok {
-				if len(oo.Issue) > 0 && oo.Issue[0].Diagnostics != nil {
-					errcode, errstr = utils.OperationOutcomeError(target, *oo.Issue[0].Diagnostics)
-					logger.Error("Forward Request Outcome", "To", url, "Err", errstr, "code", errcode)
-				}
-			}
-		} else {
-			logger.InfoJson("Response Forward Success "+url, resource)
-		}
-	}()
-}
-
-func (s *ProxyService) sendToKafka(transactionId *string, env string, auth string, input fhir.Bundle, satusehatResource *types.BaseResource, rawSatusehat any, resourceType string, resourceId *string) {
-	logger.InfoJson("SEND TO KAFKA ====>", satusehatResource)
-	logger.Info("TransactionId", transactionId)
-	logger.InfoJson("Bundle Entry", input)
-
-	go func() {
-		rawResource, err := json.Marshal(satusehatResource)
-		if err != nil {
-			return
-		}
-
-		method := fhir.HTTPVerbPOST
-		endpoint := resourceType
-		if resourceId != nil {
-			method = fhir.HTTPVerbPUT
-			endpoint = endpoint + "/" + *resourceId
-		}
-
-		// buat object types.MediatorPack untuk diproses lewat h.fhirService.ProcessForDatabase()
-		var pack types.PackMediator
-		token := strings.ReplaceAll(auth, "Bearer ", "")
-		if resourceType != "Bundle" {
-			pack = types.PackMediator{
-				TransactionID: transactionId,
-				Env:           &env,
-				Authorization: &token,
-				Method:        helper.StringPtr("PUT"),
-				Patient:       s.getFHIRPatientReference(satusehatResource),
-				Input: &fhir.Bundle{
-					Entry: []fhir.BundleEntry{
-						{
-							Resource: rawResource,
-							Request: &fhir.BundleEntryRequest{
-								Method: method,
-								Url:    endpoint,
-							},
-						},
-					},
-				},
-				Response: []types.BundleEntryResponse{
-					{
-						Id:           satusehatResource.Id,
-						ResourceType: satusehatResource.ResourceType,
-					},
-				},
-			}
-
-		} else {
-			pack = types.PackMediator{
-				TransactionID: transactionId,
-				Env:           &env,
-				Authorization: &token,
-				Method:        helper.StringPtr("PUT"),
-			}
-
-			var response []types.BundleEntryResponse
-			var responseBundle types.Bundle
-
-			// Cari id patient dari payload bukan dari response satusehat, karena response untuk resource bundle adalah array of entry
-			pack.Patient = s.getFHIRPatientReferenceFromBundleEntry(input.Entry)
-
-			satusehatResponseByte, err := json.Marshal(rawSatusehat)
-
-			if err != nil {
-				logger.ErrorJson("Gagal marshall Response Satusehat", err)
-				return
-			}
-
-			if err := json.Unmarshal(satusehatResponseByte, &responseBundle); err != nil {
-				logger.ErrorJson("Gagal Unmarshall Response Bundle Satusehat", err)
-				return
-			}
-			response = make([]types.BundleEntryResponse, len(responseBundle.Entry))
-
-			for i, res := range responseBundle.Entry {
-				var resourceType string
-				var resourceId string
-				response[i].BundleEntryResponse = *res.Response
-
-				segments := strings.Split(*res.Response.Location, "/")
-				for i, segment := range segments {
-					if segment == "v1" && len(segments) > i+2 {
-						resourceType = segments[i+1]
-						resourceId = segments[i+2]
-						break
-					}
-				}
-
-				response[i].ResourceType = &resourceType
-				response[i].Id = &resourceId
-			}
-			pack.Input = &input
-			pack.Response = response
-		}
-
-		// err = s.kafka.SendJSONMessage(c.Context(), s.Config.Kafka.Topics[0], "", pack)
-		// if err != nil {
-		// 	logger.Debug("Error Kirim Kafka Message", err)
-		// }
-
-		// logger.InfoJson("Berhasil Kirim Kafka Message", pack)
-
-		// Gunakan proxy untuk mengirim pesan kafka
-		ur, err := url.Parse(s.Config.Hapi.DevelopmentURL)
-		if err != nil {
-			logger.ErrorJson("Gagal Parse Url", err)
-			return
-		}
-		kafkaProxyUrl := fmt.Sprintf("https://%s/%s/kafka", ur.Hostname(), env)
-		var errcode int
-		var errstr string
-		body, err := json.Marshal(pack)
-		if err != nil {
-
-		}
-		req, err := http.NewRequest("POST", kafkaProxyUrl, strings.NewReader(string(body)))
-		if err != nil {
-			s.logForwardError("kafka", kafkaProxyUrl, env, "gagal membuat request", err)
-			return
-		}
-
-		// Set Request Headers
-		req.Header.Add("Authorization", auth)
-		req.Header.Add("content-type", "application/json")
-		if transactionId != nil {
-			req.Header.Add("x-request-id", *transactionId)
-		}
-
-		response, err := s.httpClient(&env).Do(req)
-		if err != nil {
-			errcode, errstr = utils.HttpError("kafka", req, nil, err)
-			logger.Error("Forward Request Connection Error", "To", kafkaProxyUrl, "env", env, "Err", errstr, "code", errcode)
-
-			// simpan transaction ke database untuk dikirim ulang melalui cronjob
-			s.saveErrorTransaction(*transactionId, "kafka", resourceType, env, kafkaProxyUrl, *pack.Patient, body, errstr)
-			return
-		}
-
-		defer response.Body.Close()
 
 		bodyBytes, err := io.ReadAll(response.Body)
 		if err != nil {
-			s.logForwardError("kafka", kafkaProxyUrl, env, "gagal membaca response body", err)
+			s.logForwardError(url, env, "gagal membaca response body", err)
 			return
 		}
 		base := map[string]any{}
@@ -641,22 +540,95 @@ func (s *ProxyService) sendToKafka(transactionId *string, env string, auth strin
 
 		if err1 != nil {
 			logger.Error("Error Marshal Response ", err1)
+			return
 		}
 
-		if response.StatusCode != fiber.StatusOK && response.StatusCode != fiber.StatusCreated {
-			_, msg := utils.HttpError("kafka", req, response, nil)
-			s.saveErrorTransaction(*transactionId, "kafka", resourceType, env, kafkaProxyUrl, *pack.Patient, body, msg)
-		}
-
-		logger.InfoJson("Response Raw Forward Request", base)
+		logger.InfoJson(fmt.Sprintf("Response Raw Forward Request (%s) ==> : ", url), base)
 	}()
 }
 
-func (s *ProxyService) logForwardError(target, url, env, msg string, err error) {
-	errcode := utils.ERR_SATUSEHAT_FORMAT
-	if target == "hapi" {
-		errcode = utils.ERR_HAPI_FORMAT
+func (s *ProxyService) ResourceTransactionDetail(resourceType string, body []byte) (string, string) {
+	var Payload types.BackupPayload
+	var bodyResource *types.BaseResource
+	var transactionId *string
+	var patientId *string
+
+	err := json.Unmarshal(body, &Payload)
+
+	if err != nil {
+		logger.Error("Gagal Unmarshal BackupPayload", "Err", err.Error())
+		return "", ""
 	}
+
+	logger.InfoJson("Payload", Payload)
+
+	dataBytes, err := json.Marshal(Payload.Response.Data)
+	if err != nil {
+		logger.Error("Gagal Remarshal Response Data", "Err", err.Error())
+		return "", ""
+	}
+
+	bodyResource, err = processor.UnmarshalResource(dataBytes, nil)
+	if err != nil {
+		logger.Error("Gagal Unmarshal ke BaseResource", "Err", err.Error())
+		return "", ""
+	}
+
+	logger.InfoJson("Body Request", bodyResource)
+	patientId = s.getFHIRPatientReference(bodyResource)
+	transactionId = bodyResource.Id
+
+	return *transactionId, *patientId
+}
+
+func (s *ProxyService) BundleTransactionDetail(resourceType string, body []byte) (string, string) {
+	var Payload types.BackupPayload
+	var Request types.AxiosRequestConfig
+	var input *fhir.Bundle
+	var transactionId *string
+	var patientId *string
+
+	err := json.Unmarshal(body, &Payload)
+
+	if err != nil {
+		logger.Error("Gagal Unmarshal BackupPayload", "Err", err.Error())
+		return "", ""
+	}
+
+	dataBytes, err := json.Marshal(Payload.Request)
+	if err != nil {
+		logger.Error("Gagal Remarshal Request", "Err", err.Error())
+		return "", ""
+	}
+
+	err = json.Unmarshal(dataBytes, &Request)
+	if err != nil {
+		logger.Error("Gagal Unmarshal ke Request", "Err", err.Error())
+		return "", ""
+	}
+
+	dataBytes, err = json.Marshal(Request.Data)
+	if err != nil {
+		logger.Error("Gagal Remarshal Request Data", "Err", err.Error())
+		return "", ""
+	}
+
+	err = json.Unmarshal(dataBytes, &input)
+	if err != nil {
+		logger.Error("Gagal Unmarshal ke Bundle Entry", "Err", err.Error())
+		return "", ""
+	}
+
+	logger.InfoJson("Bundle Input", input.Entry)
+	transactionId = helper.StringPtr(uuid.New().String())
+	patientId = s.getFHIRPatientReferenceFromBundleEntry(input.Entry)
+
+	return *transactionId, *patientId
+}
+
+func (s *ProxyService) logForwardError(url, env, msg string, err error) {
+	errcode := utils.ERR_SATUSEHAT_FORMAT
+	errcode = utils.ERR_HAPI_FORMAT
 	logger.Error("Forward Request", "To", url, "env", env, "Msg", msg, "Err", err.Error(), "code", errcode)
 }
 
@@ -667,6 +639,52 @@ func (h *ProxyService) httpClient(env *string) *http.Client {
 	return h.DevHttpClient
 }
 
+func forwardPayload(headers map[string][]string, httpResponse *http.Response, url string, requestBody interface{}, raw any) types.BackupPayload {
+	statusText := http.StatusText(httpResponse.StatusCode)
+	if statusText == "" {
+		statusText = "OK"
+	}
+
+	expressRequestHeaders := make(map[string]string)
+	for key, values := range headers {
+		if len(values) > 0 {
+			expressRequestHeaders[strings.ToLower(key)] = strings.Join(values, ", ")
+		}
+	}
+
+	// 2. Flatten Response Headers dari SATUSEHAT
+	expressResponseHeaders := make(map[string]string)
+	for key, values := range httpResponse.Header {
+		if len(values) > 0 {
+			expressResponseHeaders[strings.ToLower(key)] = strings.Join(values, ", ")
+		}
+	}
+
+	cleanRequestPayload := types.AxiosRequestConfig{
+		URL:     url,
+		Method:  "POST",
+		Headers: expressRequestHeaders,
+		Data:    requestBody,
+	}
+
+	payload := types.BackupPayload{
+		Request: cleanRequestPayload,
+		Response: types.AxiosResponse{
+			Data:       raw,
+			Status:     httpResponse.StatusCode,
+			StatusText: statusText,
+			Headers:    httpResponse.Header,
+			Config: types.AxiosRequestConfig{
+				URL:     url,
+				Method:  "POST",
+				Headers: expressRequestHeaders,
+				Data:    requestBody,
+			},
+		},
+	}
+
+	return payload
+}
 func createHttpClient(proxyUrl string) *http.Client {
 	if proxyUrl == "" {
 		if os.Getenv("HTTP_PROXY") != "" {
@@ -697,6 +715,24 @@ func createHttpClient(proxyUrl string) *http.Client {
 	return httpClient
 }
 
+func queryParams(params map[string]string) string {
+	v := url.Values{}
+	for key, value := range params {
+		v.Add(key, value)
+	}
+
+	return v.Encode()
+}
+
+func getHostName(u string) string {
+	ur, err := url.Parse(u)
+	if err != nil {
+		logger.ErrorJson("Gagal Parse Url", err)
+		return ""
+	}
+
+	return ur.Hostname()
+}
 func (s *ProxyService) GetUrl(env string, resourceType string, ctx *fiber.Ctx) (string, string, string) {
 	// Get Priority Header Value
 	priority := s.Config.FhirSource.Priority
@@ -709,10 +745,10 @@ func (s *ProxyService) GetUrl(env string, resourceType string, ctx *fiber.Ctx) (
 	}
 
 	if env == "dev" {
-		satusehatUrl = s.Config.Development.BaseURL + "/" + resourceType
+		satusehatUrl = s.Config.SatSetDev.BaseURL + "/" + resourceType
 		localUrl = s.Config.Ildki.DevelopmentURL + "/" + resourceType
 	} else {
-		satusehatUrl = s.Config.Production.BaseURL + "/" + resourceType
+		satusehatUrl = s.Config.SatSetProd.BaseURL + "/" + resourceType
 		localUrl = s.Config.Ildki.ProductionURL + "/" + resourceType
 	}
 
@@ -817,22 +853,25 @@ func (s *ProxyService) getFHIRPatientReferenceFromBundleEntry(bundleEntry []fhir
 }
 
 func (s *ProxyService) saveErrorTransaction(id string, forwardType string, resourceType string, env string, url string, patientId string, payload []byte, errstr string) {
-	transaction := types2.TransactionError{
-		ID:           id,
-		Type:         forwardType,
-		ResourceType: resourceType,
-		Env:          env,
-		Url:          url,
-		PatientId:    patientId,
-		Payload:      payload,
-		ErrorMessage: errstr,
-		Status:       "PENDING",
-		RetryCount:   0,
-	}
+	logger.Info("Simpan Transaksi Error - Background")
+	go func() {
+		transaction := types.TransactionError{
+			ID:           id,
+			Type:         forwardType,
+			ResourceType: resourceType,
+			Env:          env,
+			Url:          url,
+			PatientId:    patientId,
+			Payload:      payload,
+			ErrorMessage: errstr,
+			Status:       "PENDING",
+			RetryCount:   0,
+		}
 
-	err := s.Repository.SaveTransactionError(transaction.ToEntity())
+		err := s.Repository.SaveTransactionError(transaction.ToEntity())
 
-	if err != nil {
-		logger.ErrorJson("Gagal Simpan Transaction Error", err)
-	}
+		if err != nil {
+			logger.ErrorJson("Gagal Simpan Transaction Error", err)
+		}
+	}()
 }

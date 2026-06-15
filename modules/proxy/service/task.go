@@ -4,28 +4,33 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/nersus15/mini-proxy/mod-proxy/config"
 	"github.com/nersus15/mini-proxy/mod-proxy/entity"
+	"github.com/nersus15/mini-proxy/mod-proxy/helper/utils"
 	"github.com/nersus15/mini-proxy/mod-proxy/repository"
-	"github.com/semanggilab/lib-go-fhir/helper/utils"
 	"github.com/webcore-go/webcore/infra/logger"
 )
 
 type TaskService struct {
 	Repository *repository.ProxyRepository
 	Proxy      *ProxyService
+	Config     *config.ModuleConfig
 }
 
-func NewTaskService(r *repository.ProxyRepository, p *ProxyService) *TaskService {
-	return &TaskService{Repository: r, Proxy: p}
+func NewTaskService(r *repository.ProxyRepository, p *ProxyService, config *config.ModuleConfig) *TaskService {
+	return &TaskService{Repository: r, Proxy: p, Config: config}
 }
 
 // Task yang akan dijalankan oleh Cron
-func (s *TaskService) ProcessRetryTasks() {
-	tasks, err := s.Repository.GetPendingTransactions(5)
+func (s *TaskService) ProcessRetryTasks(token *string) {
+	// limit = 0 -> unlimited
+	tasks, err := s.Repository.GetPendingTransactions(token, s.Config.Cron.ChunkSize)
 	if err != nil {
 		fmt.Println("Error fetching tasks:", err)
 		return
@@ -37,20 +42,32 @@ func (s *TaskService) ProcessRetryTasks() {
 	logger.InfoJson("Token Yang Akan Digunakan", newTokens)
 
 	for i := range tasks {
-		fmt.Printf("Processing Task ID: %s (Retry: %d)\n", tasks[i].ID, tasks[i].RetryCount)
-		var payload map[string]json.RawMessage
-		if err := json.Unmarshal(tasks[i].Payload, &payload); err != nil {
-			panic(err)
+		fmt.Printf("Processing Task ID: %s (Retry: %d, ErrLimit: %d)\n", tasks[i].ID, tasks[i].RetryCount, s.Config.Cron.BackupLimit)
+
+		if token == nil {
+			var payload map[string]json.RawMessage
+			if err := json.Unmarshal(tasks[i].Payload, &payload); err != nil {
+				panic(err)
+			}
+
+			env := tasks[i].Env
+			if _, ok := newTokens[env]; ok {
+				newAuthorization, _ := json.Marshal(newTokens[env])
+				payload["authorization"] = newAuthorization
+			}
+			tasks[i].Payload, err = json.Marshal(payload)
+			if err != nil {
+				logger.ErrorJson("Gagal Marshall Payload", err)
+			}
 		}
 
-		env := tasks[i].Env
-		if _, ok := newTokens[env]; ok {
-			newAuthorization, _ := json.Marshal(newTokens[env])
-			payload["authorization"] = newAuthorization
-		}
-		tasks[i].Payload, err = json.Marshal(payload)
-		if err != nil {
-			logger.ErrorJson("Gagal Marshall Payload", err)
+		if tasks[i].RetryCount >= int(s.Config.Cron.BackupLimit) {
+			newUrl, err := ReplaceHostname(tasks[i].Url, s.Config.Ildki.BackupBaseUrl)
+			if err == nil {
+				newUrl = strings.ReplaceAll(newUrl, "api/", "")
+				tasks[i].Url = newUrl
+			}
+			logger.Info(fmt.Sprintf("Hostname Error Fallback TO alternative Domain(%s) .....", tasks[i].Url))
 		}
 
 		errMsg := s.executeAction(tasks[i])
@@ -66,13 +83,16 @@ func (s *TaskService) ProcessRetryTasks() {
 		}
 	}
 
-	// Sekarang tasks berisi data yang sudah terupdate
 	logger.Info("Loop finished, starting bulk update...")
 	if len(tasks) > 0 {
 		err := s.Repository.UpdateBulkTransactions(tasks)
 		if err != nil {
 			logger.DebugJson("Bulk Update Error:", err)
 		}
+
+		// CleanUp
+		logger.Info("Start Cleanup Completed Tasks.....")
+		s.Repository.DeleteOldTransactions("COMPLETED", token != nil)
 	}
 }
 
@@ -84,6 +104,7 @@ func (s *TaskService) executeAction(task entity.Transactions) string {
 	}
 	logger.InfoJson("MenjalankanTask", map[string]any{
 		"id":          task.ID,
+		"URL":         task.Url,
 		"resouceType": task.ResourceType,
 		"retryCount":  task.RetryCount,
 		"patientId":   task.PatientId,
@@ -114,12 +135,12 @@ func (s *TaskService) sendRequest(task_type string, body []byte, env string, tra
 	if task_type == "kafka" && transactionId != "" {
 		req.Header.Add("x-request-id", transactionId)
 	} else if task_type == "forward" {
-		req.Header.Add(s.Proxy.Config.FhirSource.Header, "local-first")
+		req.Header.Add(s.Proxy.Config.FhirSource.Header, "backup-satusehat")
 	}
 
 	response, err := s.Proxy.httpClient(&env).Do(req)
 	if err != nil {
-		_, errstr = utils.HttpError("kafka", req, nil, err)
+		_, errstr = utils.HttpError("satusehat", req, nil, err)
 		return errstr
 	}
 
@@ -137,10 +158,46 @@ func (s *TaskService) sendRequest(task_type string, body []byte, env string, tra
 	}
 
 	if response.StatusCode != fiber.StatusOK && response.StatusCode != fiber.StatusCreated {
-		_, msg := utils.HttpError("kafka", req, response, nil)
+		_, msg := utils.HttpError("satusehat", req, response, nil)
 
 		return msg
 	}
 
 	return ""
+}
+
+// Credential
+func (s *TaskService) SyncCredential() {
+	// Get Active Token
+	logger.Info("Jalankan Job Untuk Sinkronisasi Credential")
+	tokens := s.Repository.GetToken()
+
+	logger.InfoJson("Tokens", tokens)
+	if _, ok := tokens["dev"]; ok {
+		token := tokens["dev"]
+
+		s.ProcessRetryTasks(&token)
+	}
+
+	if _, ok := tokens["prod"]; ok {
+		token := tokens["prod"]
+
+		s.ProcessRetryTasks(&token)
+	}
+
+}
+
+func ReplaceHostname(rawURL, newHost string) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+
+	if port := u.Port(); port != "" {
+		u.Host = net.JoinHostPort(newHost, port)
+	} else {
+		u.Host = newHost
+	}
+
+	return u.String(), nil
 }

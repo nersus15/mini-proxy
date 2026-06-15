@@ -1,10 +1,12 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/nersus15/mini-proxy/mod-proxy/config"
 	"github.com/nersus15/mini-proxy/mod-proxy/entity"
+	"github.com/pressly/goose/v3"
 	"github.com/uptrace/bun"
 	"github.com/webcore-go/webcore/app/core"
 	"github.com/webcore-go/webcore/infra/logger"
@@ -29,13 +31,12 @@ func NewProxyRepository(ctx *core.AppContext, cfg *config.ModuleConfig, conn por
 }
 
 func (r *ProxyRepository) SaveTransactionError(transaction *entity.Transactions) error {
-	logger.DebugJson("Simpan Error Transaction Ke DB", transaction)
 	_, err := r.Connection.InsertOne(r.Context.Context, transaction.TableName(), transaction)
 
 	return err
 }
 
-func (r *ProxyRepository) GetPendingTransactions(limit int64) ([]entity.Transactions, error) {
+func (r *ProxyRepository) GetPendingTransactions(token *string, limit int64) ([]entity.Transactions, error) {
 	results := make([]entity.Transactions, 0)
 
 	// Filter menggunakan DbExpression sesuai interface
@@ -44,6 +45,18 @@ func (r *ProxyRepository) GetPendingTransactions(limit int64) ([]entity.Transact
 			Expr: "(status = ? OR status = ?)",
 			Args: []any{"PENDING", "RETRY"},
 		},
+	}
+
+	if token != nil {
+		filter = append(filter, port.DbExpression{
+			Expr: "id = ?",
+			Args: []any{token},
+		})
+	} else {
+		filter = append(filter, port.DbExpression{
+			Expr: "resource_type != ?",
+			Args: []any{"credential"},
+		})
 	}
 
 	// Menentukan urutan (Lama ke Baru)
@@ -82,15 +95,29 @@ func (r *ProxyRepository) UpdateTransaction(transaction *entity.Transactions) er
 
 func (r *ProxyRepository) UpdateBulkTransactions(transactions []entity.Transactions) error {
 	conn := r.Connection.GetConnection()
+	batchSize := 100
 
 	if bunDB, ok := conn.(*bun.DB); ok {
+		err := bunDB.RunInTx(r.Context.Context, nil, func(ctx context.Context, tx bun.Tx) error {
+			for i := 0; i < len(transactions); i += batchSize {
+				end := i + batchSize
+				if end > len(transactions) {
+					end = len(transactions)
+				}
 
-		_, err := bunDB.NewUpdate().
-			Model(&transactions).
-			Column("status", "updated_at", "retry_count", "error_message").
-			Bulk().
-			Exec(r.Context.Context)
+				batch := transactions[i:end]
 
+				_, err := tx.NewUpdate().
+					Model(&batch).
+					Column("status", "updated_at", "retry_count", "error_message").
+					Bulk().
+					Exec(ctx)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 		return err
 	} else {
 		return fmt.Errorf("Connection bukan bun.DB")
@@ -98,9 +125,37 @@ func (r *ProxyRepository) UpdateBulkTransactions(transactions []entity.Transacti
 }
 
 // DeleteOldTransactions menghapus data yang sudah sukses (opsional untuk cleanup)
-func (r *ProxyRepository) DeleteOldTransactions(status string) (int64, error) {
-	filter := []port.DbExpression{}
+func (r *ProxyRepository) DeleteOldTransactions(status string, credOnly bool) (int64, error) {
 
+	filter := []port.DbExpression{
+		{
+			Expr: "status",
+			Args: []any{
+				status,
+			},
+		},
+	}
+
+	if credOnly {
+		filter = append(filter, port.DbExpression{
+			Expr: "resource_type",
+			Args: []any{
+				"credential",
+			},
+		})
+	}
+	return r.Connection.Delete(r.Context.Context, entity.Transactions{}.TableName(), filter)
+}
+
+func (r *ProxyRepository) DeleteOldCredTransactions(token string) (int64, error) {
+	filter := []port.DbExpression{
+		{
+			Expr: "id != ?",
+			Args: []any{
+				token,
+			},
+		},
+	}
 	return r.Connection.Delete(r.Context.Context, entity.Transactions{}.TableName(), filter)
 }
 
@@ -118,11 +173,12 @@ func (r *ProxyRepository) SaveClientCredentials(clientCredential *entity.ClinetC
 
 	_, err := bunDB.NewInsert().
 		Model(clientCredential).
-		On("DUPLICATE KEY UPDATE").
-		Set("access_token = VALUES(access_token)").
-		Set("expired_at = VALUES(expired_at)").
-		Set("env = VALUES(env)").
-		Set("updated_at = NOW()").
+		On("CONFLICT (client_id) DO UPDATE").
+		Set("access_token = EXCLUDED.access_token").
+		Set("expired_at = EXCLUDED.expired_at").
+		Set("env = EXCLUDED.env").
+		Set("updated_at = CURRENT_TIMESTAMP").
+		Returning("NULL").
 		Exec(ctx)
 
 	if err != nil {
@@ -145,7 +201,7 @@ func (r *ProxyRepository) GetToken() map[string]string {
 	filter := []port.DbExpression{
 		{
 			Expr: "(client_id = ? OR client_id = ?)",
-			Args: []any{r.Config.Development.ClientID, r.Config.Production.ClientID},
+			Args: []any{r.Config.SatSetDev.ClientID, r.Config.SatSetProd.ClientID},
 		},
 	}
 	sort := map[string]int{"created_at": 1}
@@ -164,4 +220,32 @@ func (r *ProxyRepository) GetToken() map[string]string {
 	}
 
 	return tokens
+}
+
+func (d *ProxyRepository) StartMigration(DB interface{}, dialect string, service string, command string, dir string, args []string) error {
+	bunDB, ok := DB.(*bun.DB)
+	if !ok {
+		logger.Error("Gagal konversi: objek yang dikirim bukan merupakan *bun.DB")
+		return fmt.Errorf("invalid *bun.DB instance")
+	}
+
+	// Set dialek wajib di sini sebelum eksekusi run
+	if dialect == "sqlite" {
+		goose.SetDialect("sqlite3")
+	}
+
+	if service != "" {
+		goose.SetTableName("__migration_" + service + "_logs")
+	} else {
+		goose.SetTableName("__migration_webcore_logs")
+	}
+
+	logger.Info(fmt.Sprintf("Mengeksekusi Goose %s pada folder: %s", command, dir))
+
+	if err := goose.RunContext(d.Context.Context, command, bunDB.DB, dir, args...); err != nil {
+		logger.Error(fmt.Sprintf("goose run %s: %v", command, err))
+		return err
+	}
+
+	return nil
 }
