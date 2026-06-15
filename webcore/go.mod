@@ -6,18 +6,15 @@ require (
 	github.com/nersus15/lib-go-cron v0.0.0-20260512072729-8a5337f80c08
 	github.com/webcore-go/lib-kafka v0.1.8
 	github.com/webcore-go/lib-memory v0.1.3
-	github.com/webcore-go/lib-mysql v0.1.11
 )
 
 require (
-	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.29.12 // indirect
 	github.com/aws/smithy-go v1.22.3 // indirect
 	github.com/containerd/typeurl/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
-	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/hashicorp/go-version v1.8.0 // indirect
 	github.com/maypok86/otter/v2 v2.3.0 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
@@ -32,12 +29,10 @@ require (
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/testcontainers/testcontainers-go v0.40.0 // indirect
-	github.com/uptrace/bun/dialect/mysqldialect v1.2.18 // indirect
 	go.opentelemetry.io/otel/sdk v1.40.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.40.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.7.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
