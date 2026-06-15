@@ -22,31 +22,31 @@ var APP_LIBRARIES = map[string]core.LibraryLoader{
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("Usage: migrate [stream|gateway|consent] [command]")
+		log.Fatal("Usage: migrate [mysql | sqlite | postgres] [command]")
 		os.Exit(1)
 	}
 
-	service := os.Args[1]
-	validServices := map[string]bool{
-		"stream":  true,
-		"gateway": true,
-		"consent": true,
+	dialect := os.Args[1]
+	validDB := map[string]bool{
+		"mysql":    true,
+		"sqlite":   true,
+		"postgres": true,
 	}
 
-	if !validServices[service] {
-		log.Fatal("Usage: migrate [stream|gateway|consent]")
+	if !validDB[dialect] {
+		log.Fatal("Usage: migrate [mysql | sqlite | postgres]")
 		os.Exit(1)
 	}
 
 	var flags = flag.NewFlagSet("migrate", flag.ExitOnError)
 	var dir *string
-	switch service {
-	case "gateway":
-		dir = flags.String("dir", "webcore/init/migrations/gateway", "direktori file migrasi")
-	case "consent":
-		dir = flags.String("dir", "webcore/init/migrations/consent", "direktori file migrasi")
+	switch dialect {
+	case "mysql":
+		dir = flags.String("dir", "webcore/init/migrations/proxy/mysql", "direktori file migrasi")
+	case "sqlite":
+		dir = flags.String("dir", "webcore/init/migrations/proxy/sqlite", "direktori file migrasi")
 	default:
-		dir = flags.String("dir", "webcore/init/migrations/stream", "direktori file migrasi")
+		dir = flags.String("dir", "webcore/init/migrations/proxy/postgres", "direktori file migrasi")
 	}
 	command := os.Args[2]
 	flags.Parse(os.Args[3:])
@@ -71,7 +71,7 @@ func main() {
 
 	// Start the application
 	if err := application.Context.Start(); err != nil {
-		log.Fatalf("Failed to start migration %s: %v", service, err)
+		log.Fatalf("Failed to start migration Proxy [%s]: %v", dialect, err)
 		os.Exit(1)
 	}
 
@@ -82,7 +82,7 @@ func main() {
 	}
 
 	db := lib.(*sql.SQLDatabase)
-	db.StartMigration(ctx, service, command, *dir, args)
+	db.StartMigration(ctx, "proxy", command, *dir, args)
 
-	fmt.Printf("Migration %s %s run successfully\n", service, command)
+	fmt.Printf("Migration %s %s run successfully\n", "proxy", command)
 }
