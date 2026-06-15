@@ -71,7 +71,6 @@ func (m *Module) Init(ctx *core.AppContext) error {
 	}
 
 	m.memory = libMem.(port.ICacheMemory)
-
 	lib, ok := core.Instance().Context.GetDefaultSingletonInstance("database")
 
 	if !ok {
@@ -80,14 +79,15 @@ func (m *Module) Init(ctx *core.AppContext) error {
 
 	db := lib.(port.IDatabase)
 
-	migrationDir := fmt.Sprintf("webcore/init/migrations/proxy/%s", ctx.Config.Database.Driver)
-
 	m.repository = repository.NewProxyRepository(ctx, m.config, db)
 
-	err := m.repository.StartMigration(db.GetConnection(), ctx.Config.Database.Driver, "miniproxy", "up", migrationDir, nil)
-	if err != nil {
-		// Jika Goose gagal berjalan
-		return fmt.Errorf("Gagal menjalankan migrasi otomatis: %s", err)
+	// Jalankan migrasi otomatis hanya jika database driver menggunakan sqlite
+	if ctx.Config.Database.Driver == "sqlite" {
+		migrationDir := fmt.Sprintf("webcore/init/migrations/proxy/%s", ctx.Config.Database.Driver)
+		err := m.repository.StartMigration(db.GetConnection(), ctx.Config.Database.Driver, "miniproxy", "up", migrationDir, nil)
+		if err != nil {
+			return fmt.Errorf("Gagal menjalankan migrasi otomatis: %s", err)
+		}
 	}
 
 	if m.config.Kafka.Enabled {

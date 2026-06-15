@@ -40,14 +40,8 @@ func main() {
 	var libraries map[string]core.LibraryLoader
 	var packages []core.Module
 
-	switch service {
-	case "proxy":
-		if cfg.Server.Port == 2021 {
-			cfg.Server.Port = 2022
-		}
-		libraries = proxy.APP_LIBRARIES
-		packages = proxy.APP_PACKAGES
-	}
+	libraries = proxy.APP_LIBRARIES
+	packages = proxy.APP_PACKAGES
 
 	// Initialize application
 	application := core.NewApp(ctx, &cfg, libraries, packages)
