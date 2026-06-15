@@ -19,29 +19,21 @@ RUN go install github.com/go-delve/delve/cmd/dlv@latest
 # Build Producer dengan CGO untuk Kafka support
 RUN go build -o /app/main ./webcore/main.go
 
-# Port check health untuk FHIR Stream
 EXPOSE 2021
-# Port untuk FHIR Gateway
-EXPOSE 2022
-# Port untuk FHIR Consent
-EXPOSE 2023
 
 # CMD ["air", "--build.cmd", "go build -o /app/main /app/webcore/main.go", "--build.bin", "/app/webcore", "--debug.host", "0.0.0.0", "--debug.port", "2345"]
 CMD ["air", "-c", "/app/.air-proxy.toml"]
 
-## BUILD STAGE
-FROM golang:1.25-alpine3.23 AS builder
 
-# Install packages required for CGO and librdkafka
-# build-base: Provides GCC, make, and other build tools (equivalent to build-essential in Debian/Ubuntu)
-# librdkafka-dev: Development headers for librdkafka
-# librdkafka: Runtime library for librdkafka
-RUN apk add --no-cache \
-    gcc \
-    musl-dev \
+## BUILD STAGE
+FROM golang:1.25-trixie AS builder
+
+# Install packages required for CGO and librdkafka di Debian
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     librdkafka-dev \
-    pkgconfig \
-    build-base
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -49,39 +41,33 @@ WORKDIR /app
 # Copy source code
 COPY . .
 
-# Copy go mod files
-# COPY go.work go.work.sum ./
-
 # Download dependencies
 RUN go work sync
 
-# Build the application
-# Dengan Kafka ditanam ke dalam binary
-RUN CGO_ENABLED=1 GOOS=linux go build -tags musl -o /app/main /app/webcore/main.go
-
-# # Jika Tanpa Kafka
-# RUN CGO_ENABLED=0 GOOS=linux go build -o /app/main /app/webcore/main.go
+# Build the application dengan CGO (Tanpa tag musl karena Debian menggunakan glibc)
+RUN CGO_ENABLED=1 GOOS=linux go build -o /app/main /app/webcore/main.go
 
 # Build the migrate tool
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/migrate webcore/init/migrate.go
 
+
 ## PRODUCTION STAGE
-FROM alpine:3.23 AS production
+FROM debian:trixie-slim AS production
 
-# Install runtime dependencies for librdkafka
-# The binary is built with CGO_ENABLED=1 and dynamically links to librdkafka
-RUN apk add --no-cache \
+# Install runtime dependencies untuk librdkafka dan CA certificates di Debian
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     ca-certificates \
-    librdkafka \
+    librdkafka1 \
     libssl3 \
-    libcrypto3 \
-    zlib \
-    libstdc++ \
-    libgcc
+    zlib1g \
+    libstdc++6 \
+    libgcc-s1 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create user and group with limited privileges (non-root)
-RUN addgroup -g 2000 webcore && \
-    adduser -D -u 2000 -G webcore webcore
+# Create user and group dengan limited privileges (non-root) menggunakan sintaks Debian
+RUN groupadd -g 2000 webcore && \
+    useradd -m -u 2000 -g webcore -s /bin/bash webcore
 
 # Set working directory
 WORKDIR /app
@@ -102,12 +88,7 @@ RUN chown -R webcore:webcore /app
 USER webcore
 
 # Expose port
-# Port check health untuk FHIR Stream
 EXPOSE 2021
-# Port untuk FHIR Gateway
-EXPOSE 2022
-# Port untuk FHIR Consent
-EXPOSE 2023
 
 # Run the application
-CMD ["webcore", "stream"]
+CMD ["webcore", "proxy"]

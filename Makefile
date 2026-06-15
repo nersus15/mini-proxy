@@ -2,7 +2,7 @@
 APP_NAME=./tmp/main
 MAIN_PACKAGE=./webcore/main.go
 DOCKER_COMPOSE_FILE=docker-compose.dev-min.yml
-DOCKER_PACKAGE=kemenkesri/satusehat-fhir-stream:latest
+DOCKER_PACKAGE=fathur15/mini-proxy:latest
 DOCKER_CR=docker.io
 TEST_FLAGS=-v -race
 

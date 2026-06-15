@@ -1,5 +1,5 @@
 app:
-  name: konsolidator-api
+  name: mini-proxy
   version: 1.0.0
   environment: development
 
@@ -12,7 +12,7 @@ app:
 
   # logging settings
   logging:
-    level: info
+    level: debug
     format: "${time} | ${status} | ${latency} | ${ip} | ${method} | ${path} | ${error}\n"
     output: stdout
 
@@ -54,32 +54,78 @@ app:
 server:
   host: 0.0.0.0
   port: 2021
-  path: "/api"
+  path: "/"
   read_timeout: 30s
   write_timeout: 30s
 
 auth:
-  control: RBAC
-  store: yaml # yaml, db
-  type: apikey # Options: "jwt", "apikey", "basic"
-  secret_key: your-secret-key-here
-  expires_in: 86400 # 24 hours in seconds
+  type: none
+  # control: RBAC
+  # store: db # yaml, db
+  # type: jwt # Options: "jwt", "apikey", "basic"
+  # secret_key: your-secret-key-here
+  # expires_in: 86400 # 24 hours in seconds
   # API Key specific settings (only used when type is "apikey")
   # api_key_header: "X-API-Key"  # Header name for API key
   # api_key_prefix: ""  # Optional prefix for API key validation
 
 database:
-  driver: postgres
-  host: ""
-  port: 5432
-  user: konsolidator
-  password: konsolidator
-  name: konsolidator
-  schema_name: public
+  # driver: postgres
+  # host: "localhost"
+  # port: 6434
+  # user: miniproxy
+  # password: mini-proxy
+  # name: miniproxy
+  # schema_name: public
+  # ssl_mode: disable
+  # max_idle_conns: 5
+  # max_open_conns: 10
+  # conn_max_lifetime: 60m
+  
+  # driver: postgres
+  # host: "localhost"
+  # port: 5432
+  # user: miniproxy
+  # password: miniproxy 
+  # name: miniproxy
+  # # schema_name: public
+  # ssl_mode: disable
+  # max_idle_conns: 5
+  # max_open_conns: 10
+  # conn_max_lifetime: 60m
+
+  # driver: mysql
+  # host: "localhost"
+  # port: 3306
+  # user: root
+  # password:  
+  # name: miniproxy
+  # # schema_name: public
+  # ssl_mode: disable
+  # max_idle_conns: 5
+  # max_open_conns: 10
+  # conn_max_lifetime: 60m
+
+  driver: sqlite
+  host: "localhost"
+  port: 3306
+  user: root
+  password:  
+  name: ./tmp/miniproxy.db
+  # schema_name: public
   ssl_mode: disable
-  max_idle_conns: 10
-  max_open_conns: 100
+  max_idle_conns: 5
+  max_open_conns: 10
   conn_max_lifetime: 60m
+  attributes: 
+    _pragma_key: "secret_key"
+    _pragma_cipher_page_size: 4096
+    _auth:
+    _auth_user: "miniproxy"
+    _auth_pass: "miniproxy"
+
+  
+
   # Example slave database configuration
   # slave_hosts:
   #   - host: slave1.example.com
@@ -92,11 +138,37 @@ database:
   #     max_open_conns: 50
   #     conn_max_lifetime: 3600
 
-redis:
-  host: ""
-  port: 6379
-  password: ""
-  db: 0
+satusehat_dev:
+  client_id: <satusehat-clientid>
+  authurl: <satusehat-auth-url>
+  baseurl: <satusehat-base-url>
+
+satusehat_prod:
+  client_id: <satusehat-clientid>
+  authurl: <satusehat-auth-url>
+  baseurl: <satusehat-base-url>
+    
+
+ildki:
+  faskes_id: <faskes-id-satusehat>
+  enabled: true
+  zero_trust: false
+  development_url: <ildki-dev-baseurl>
+  production_url: <ildki-prod-baseurl>
+  development_authurl: <ildki-dev-authurl>
+  production_authurl:  <ildki-prod-authurl
+  backup_baseurl: <ildki-alternative-domain> //without https
+
+cron:
+  enabled: true
+  backup_chunksize: 1000
+  schedule: "*/10 23 * * *"
+
+# redis:
+#   host: ""
+#   port: 6379
+#   password: ""
+#   db: 0
   # Example slave Redis configuration
   # slave_hosts:
   #   - host: slave1.example.com
@@ -104,19 +176,13 @@ redis:
   #     password: ""
   #     db: 0
 
-kafka:
-  brokers:
-    - "localhost:9092"
-  consumer_group_id: konsolidator-group
-  topics:
-    - konsolidator-topic
 
 # Google PubSub configuration
-pubsub:
-  project_id: ""
-  topic: ""
-  subscription: ""
-  emulator_host: ""
-  credentials: ""
-  max_messages_per_pull: 50
-  sleep_time_between_pulls: 10s
+  # pubsub:
+  #   project_id: ""
+  #   topic: ""
+  #   subscription: ""
+  #   emulator_host: ""
+  #   credentials: ""
+  #   max_messages_per_pull: 50
+  #   sleep_time_between_pulls: 10s

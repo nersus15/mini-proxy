@@ -1,6 +1,6 @@
 [build]
 cmd = "go build -o ./tmp/main ./webcore/main.go"
-entrypoint = ["./tmp/main", "gateway"]
+entrypoint = ["./tmp/main", "proxy"]
 exclude_dir = ["go"]
 poll = true
 poll_interval = 500
