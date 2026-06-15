@@ -1,9 +1,6 @@
 go 1.25.0
 
 use (
-	// ./libraries/fhir
-	./libraries/lib-mysql
-	./libraries/lib-sqlchiper
 	./modules/proxy
 	./webcore
 )
