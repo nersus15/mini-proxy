@@ -7,7 +7,9 @@ import (
 	"log"
 	"os"
 
+	sqlite "github.com/nersus15/lib-sqlchiper"
 	memory "github.com/webcore-go/lib-memory"
+	mysql "github.com/webcore-go/lib-mysql"
 	postgres "github.com/webcore-go/lib-postgres"
 	sql "github.com/webcore-go/lib-sql"
 	"github.com/webcore-go/webcore/app/core"
@@ -18,6 +20,8 @@ import (
 var APP_LIBRARIES = map[string]core.LibraryLoader{
 	"cache:memory":      &memory.MemoryLoader{},
 	"database:postgres": &postgres.PostgresLoader{},
+	"database:mysql":    &mysql.MysqlLoader{},
+	"database:sqlite":   &sqlite.SqliteLoader{},
 }
 
 func main() {
