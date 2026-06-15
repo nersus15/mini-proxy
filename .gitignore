@@ -8,3 +8,4 @@ go/*
 modules/proxy/certs/*
 !modules/proxy
 */.DS_Store
+public.pub
