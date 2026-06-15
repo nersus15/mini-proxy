@@ -6,6 +6,7 @@ require (
 	github.com/nersus15/lib-go-cron v0.0.0-20260512072729-8a5337f80c08
 	github.com/webcore-go/lib-kafka v0.1.8
 	github.com/webcore-go/lib-memory v0.1.3
+	github.com/webcore-go/lib-mysql v0.1.11
 )
 
 require (
@@ -16,12 +17,15 @@ require (
 	github.com/containerd/typeurl/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
+	github.com/fatih/color v1.18.0 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/hashicorp/go-version v1.8.0 // indirect
 	github.com/maypok86/otter/v2 v2.3.0 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/moby/sys/mountinfo v0.7.2 // indirect
 	github.com/moby/term v0.5.2 // indirect
+	github.com/mutecomm/go-sqlcipher/v4 v4.4.2 // indirect
+	github.com/nersus15/lib-sqlchiper v0.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/pressly/goose/v3 v3.27.0 // indirect
 	github.com/prometheus/client_golang v1.21.1 // indirect
@@ -32,7 +36,8 @@ require (
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/testcontainers/testcontainers-go v0.40.0 // indirect
 	github.com/uptrace/bun/dialect/mysqldialect v1.2.18 // indirect
-	github.com/webcore-go/lib-mysql v0.1.11 // indirect
+	github.com/uptrace/bun/dialect/sqlitedialect v1.2.18 // indirect
+	github.com/uptrace/bun/extra/bundebug v1.2.18 // indirect
 	go.opentelemetry.io/otel/sdk v1.40.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.40.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.7.1 // indirect
