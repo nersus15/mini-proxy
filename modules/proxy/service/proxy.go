@@ -739,24 +739,24 @@ func (s *ProxyService) GetUrl(env string, resourceType string, ctx *fiber.Ctx) (
 	header := ctx.Get(s.Config.FhirSource.Header, "")
 
 	satusehatUrl := ""
-	localUrl := ""
+	ildkiUrl := ""
 	if header != "" {
 		priority = header
 	}
 
 	if env == "dev" {
 		satusehatUrl = s.Config.SatSetDev.BaseURL + "/" + resourceType
-		localUrl = s.Config.Ildki.DevelopmentURL + "/" + resourceType
+		ildkiUrl = s.Config.Ildki.DevelopmentURL + "/" + resourceType
 	} else {
 		satusehatUrl = s.Config.SatSetProd.BaseURL + "/" + resourceType
-		localUrl = s.Config.Ildki.ProductionURL + "/" + resourceType
+		ildkiUrl = s.Config.Ildki.ProductionURL + "/" + resourceType
 	}
 
 	switch priority {
 	case "local-first":
-		return localUrl, satusehatUrl, priority
+		return ildkiUrl, satusehatUrl, priority
 	case "satusehat-first":
-		return satusehatUrl, localUrl, priority
+		return satusehatUrl, ildkiUrl, priority
 	default:
 		return "", "", priority
 	}
@@ -836,8 +836,6 @@ func (s *ProxyService) getFHIRPatientReferenceFromBundleEntry(bundleEntry []fhir
 			continue
 		}
 		baseResource, err = processor.UnmarshalResource(entryBytes, nil)
-		// err = json.Unmarshal(entryBytes, &baseResource)
-
 		if err != nil {
 			logger.Error("Gagal Unmarshal Entry", err)
 			continue
@@ -871,7 +869,7 @@ func (s *ProxyService) saveErrorTransaction(id string, forwardType string, resou
 		err := s.Repository.SaveTransactionError(transaction.ToEntity())
 
 		if err != nil {
-			logger.ErrorJson("Gagal Simpan Transaction Error", err)
+			logger.ErrorJson("Gagal Simpan Transaction", err)
 		}
 	}()
 }
