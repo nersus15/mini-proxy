@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/nersus15/lib-go-cron v0.0.0-20260512072729-8a5337f80c08
+	github.com/nersus15/lib-sqlchiper v0.1.1
 	github.com/webcore-go/lib-kafka v0.1.8
 	github.com/webcore-go/lib-memory v0.1.3
 	github.com/webcore-go/lib-mysql v0.1.11
@@ -25,7 +26,6 @@ require (
 	github.com/moby/sys/mountinfo v0.7.2 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/mutecomm/go-sqlcipher/v4 v4.4.2 // indirect
-	github.com/nersus15/lib-sqlchiper v0.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/pressly/goose/v3 v3.27.0 // indirect
 	github.com/prometheus/client_golang v1.21.1 // indirect
