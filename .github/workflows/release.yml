@@ -46,11 +46,14 @@ jobs:
       - name: Build binary
         run: |
           mkdir -p release
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} \
-          go build -o release/main${{ matrix.os == 'windows' && '.exe' || '' }} \
-          -ldflags="-X main.Version=${{ env.VERSION }}" \
-          ./webcore/main.go
+          EXT=""
+          if [ "${{ matrix.os }}" = "windows" ]; then EXT=".exe"; fi
 
+          echo "Target OS: ${{ matrix.os }}"
+          echo "Target Arch: ${{ matrix.arch }}"
+
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -v -o "release/mini-proxy${EXT}" -ldflags="-X main.Version=${{ env.VERSION }}" ./webcore
+          
       - name: Create release structure
         run: |
           RELEASE_DIR="mini-proxy-${{ matrix.os }}-${{ matrix.arch }}"
