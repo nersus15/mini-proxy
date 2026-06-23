@@ -39,7 +39,7 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Building version: $VERSION"
-
+          
       - name: Go mod download
         run: go work sync
 
@@ -53,7 +53,7 @@ jobs:
           echo "Target Arch: ${{ matrix.arch }}"
 
           GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -v -o "release/mini-proxy${EXT}" -ldflags="-X main.Version=${{ env.VERSION }}" ./webcore
-          
+
       - name: Create release structure
         run: |
           RELEASE_DIR="mini-proxy-${{ matrix.os }}-${{ matrix.arch }}"
