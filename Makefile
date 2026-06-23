@@ -98,5 +98,18 @@ clean:
 	@echo "Cleaning build artifacts..."
 	@rm -f $(APP_NAME)
 
+# Release targets
+release-local:
+	@echo "Building local release package..."
+	@bash scripts/build-release.sh
+
+release-all:
+	@echo "Building release packages for all platforms..."
+	@bash scripts/build-all-platforms.sh
+
+release-version:
+	@echo "Building release with version..."
+	@bash scripts/build-all-platforms.sh $(VERSION)
+
 # Target phony: mendeklarasikan target yang bukan file
-.PHONY: all-stream all-gateway all-consent sync debug-stream debug-gateway debug-consent run-stream run-gateway run-consent test build docker-up docker-down docker-build docker-push clean
+.PHONY: all-stream all-gateway all-consent sync debug-stream debug-gateway debug-consent run-stream run-gateway run-consent test build docker-up docker-down docker-build docker-push clean release-local release-all release-version

@@ -88,7 +88,7 @@ func (s *ProxyService) PostResource(env string, resourceType string, ctx *fiber.
 			logger.Error("buildForwardRequest", "err", err)
 		} else {
 			hostname := utils.GetHostName(s.Config.Ildki.ProductionURL)
-			forwardUrl = fmt.Sprintf("https://%s/%s/backup", hostname, env)
+			forwardUrl = fmt.Sprintf("https://%s/api/%s/backup", hostname, env)
 			s.forwardRequestToIldki("POST", forwardUrl, env, auth, resourceType, newBody)
 		}
 	}
@@ -119,7 +119,7 @@ func (s *ProxyService) PutResource(env string, resourceType string, id string, c
 			logger.Error("buildForwardRequest", "err", err)
 		} else {
 			hostname := utils.GetHostName(s.Config.Ildki.ProductionURL)
-			forwardUrl = fmt.Sprintf("https://%s/%s/backup", hostname, env)
+			forwardUrl = fmt.Sprintf("https://%s/api/%s/backup", hostname, env)
 			s.forwardRequestToIldki("POST", forwardUrl, env, auth, resourceType, newBody)
 		}
 	}
@@ -150,7 +150,7 @@ func (s *ProxyService) PatchResource(env string, resourceType string, id string,
 			logger.Error("buildForwardRequest", "err", err)
 		} else {
 			hostname := utils.GetHostName(s.Config.Ildki.ProductionURL)
-			forwardUrl = fmt.Sprintf("https://%s/%s/backup", hostname, env)
+			forwardUrl = fmt.Sprintf("https://%s/api/%s/backup", hostname, env)
 			s.forwardRequestToIldki("POST", forwardUrl, env, auth, resourceType, newBody)
 		}
 	}
@@ -166,6 +166,13 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 	data.Set("client_id", clientId)
 	data.Set("client_secret", clientSecret)
 	requestPayload := strings.NewReader(data.Encode())
+
+	// Get Query Params
+	params := map[string]string{
+		"grant_type": "client_credentials",
+	}
+	qp := utils.QueryParams(params)
+	endpoint = fmt.Sprintf("%s?%s", endpoint, qp)
 
 	req, err := http.NewRequest("POST", endpoint, requestPayload)
 	if err != nil {

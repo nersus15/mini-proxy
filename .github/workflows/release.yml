@@ -1,0 +1,87 @@
+name: Release mini-proxy
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: darwin
+            arch: amd64
+          - os: darwin
+            arch: arm64
+          - os: windows
+            arch: amd64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Set version from tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Building version: $VERSION"
+
+      - name: Go mod download
+        run: go work sync
+
+      - name: Build binary
+        run: |
+          mkdir -p release
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} \
+          go build -o release/main${{ matrix.os == 'windows' && '.exe' || '' }} \
+          -ldflags="-X main.Version=${{ env.VERSION }}" \
+          ./webcore/main.go
+
+      - name: Create release structure
+        run: |
+          RELEASE_DIR="mini-proxy-${{ matrix.os }}-${{ matrix.arch }}"
+          mkdir -p "$RELEASE_DIR"
+          
+          # Copy binary
+          mkdir -p "$RELEASE_DIR/app"
+          cp release/main${{ matrix.os == 'windows' && '.exe' || '' }} "$RELEASE_DIR/app/main"
+          chmod +x "$RELEASE_DIR/app/main"
+          
+          # Copy configuration
+          cp config.yaml.example "$RELEASE_DIR/app/config.yaml.example"
+          cp go.work "$RELEASE_DIR/app/go.work"
+          
+          # Copy docker files
+          cp docker-compose-barebone.yml "$RELEASE_DIR/docker-compose.yml"
+          cp Dockerfile.barebone "$RELEASE_DIR/Dockerfile"
+          
+          # Copy webcore directory for dependencies
+          cp -r webcore "$RELEASE_DIR/"
+          
+          # Create tar.gz
+          tar -czf "$RELEASE_DIR.tar.gz" "$RELEASE_DIR"
+          echo "RELEASE_ARCHIVE=$RELEASE_DIR.tar.gz" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{ env.RELEASE_ARCHIVE }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
