@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 package service
 
 import (
@@ -299,6 +302,12 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 
 func (s *ProxyService) SendCredentialToProxyIL(env string, credential *types.SatuSehatTokenResponse) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(fmt.Sprintf("Panic terjadi di background SendCredentialToProxyIL: %v", r))
+			}
+		}()
+
 		logger.Info("Send Credential To ILDKI In Background Process")
 		body, err := json.Marshal(credential)
 		if err != nil {
@@ -354,6 +363,12 @@ func (s *ProxyService) SendCredentialToProxyIL(env string, credential *types.Sat
 func (s *ProxyService) SaveCredential(env string, credential *types.SatuSehatTokenResponse) {
 	logger.Info("Save User Credential In Background Process")
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(fmt.Sprintf("Panic terjadi di SaveCredential: %v", r))
+			}
+		}()
+
 		entityData := credential.ToEntity()
 
 		var issuedAtUnixMilli int64
@@ -475,9 +490,15 @@ func (s *ProxyService) sendRequest(method string, url string, env string, target
 
 func (s *ProxyService) forwardRequestToIldki(method string, url string, env string, auth string, resourceType string, body []byte) {
 	go func() {
-		target := "ildki"
-
 		logger.Info("===== Forward Request di Background =====", "Method", method, "Url", url, "Env", env)
+
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(fmt.Sprintf("Panic terjadi di background forwardRequestToIldki: %v", r))
+			}
+		}()
+
+		target := "ildki"
 		var transactionId string
 		var patientId string
 
@@ -853,6 +874,12 @@ func (s *ProxyService) getFHIRPatientReferenceFromBundleEntry(bundleEntry []fhir
 func (s *ProxyService) saveErrorTransaction(id string, forwardType string, resourceType string, env string, url string, patientId string, payload []byte, errstr string) {
 	logger.Info("Simpan Transaksi Error - Background")
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(fmt.Sprintf("Panic terjadi di background saveErrorTransaction: %v", r))
+			}
+		}()
+
 		transaction := types.TransactionError{
 			ID:           id,
 			Type:         forwardType,
