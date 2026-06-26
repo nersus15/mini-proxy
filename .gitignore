@@ -9,3 +9,7 @@ modules/proxy/certs/*
 !modules/proxy
 */.DS_Store
 public.pub
+scripts/*
+dist/*
+.DS_Store
+docker-compose-*.yml
