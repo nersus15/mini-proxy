@@ -18,6 +18,8 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 BASE_DIR="$(dirname "$SCRIPT_DIR")"
 cd $BASE_DIR
 
+BUILD_DIR=build
+
 echo -e "${BLUE}╔════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║  Mini-Proxy Multi-Platform Build Script    ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════╝${NC}"
@@ -38,10 +40,10 @@ go work sync
 echo -e "${GREEN}✓ Modules synced${NC}"
 echo ""
 
-if [ -d "dist" ]; then rm -rf dist; fi
-mkdir -p dist
 
-BUILD_DIR=dist
+if [ -d "$BUILD_DIR" ]; then rm -rf "$BUILD_DIR"; fi
+mkdir -p "$BUILD_DIR"
+
 
 # Build for each platform
 for PLATFORM in "${PLATFORMS[@]}"; do
@@ -105,13 +107,17 @@ echo ""
 
 # Create release packages for each platform
 RELEASE_DIR_PREFIX="mini-proxy"
+RELEASE_DIR_BASE="dist"
+
+if [ -d "$RELEASE_DIR_BASE" ]; then rm -rf "$RELEASE_DIR_BASE"; fi
+
 
 for PLATFORM in "${PLATFORMS[@]}"; do
     IFS=':' read -r OS ARCH <<< "$PLATFORM"
     
     echo -e "${YELLOW}Creating package for: $OS-$ARCH${NC}"
     
-    RELEASE_DIR="${RELEASE_DIR_PREFIX}-${OS}-${ARCH}"
+    RELEASE_DIR="$RELEASE_DIR_BASE/${RELEASE_DIR_PREFIX}-${OS}-${ARCH}"
     BINARY_NAME="main"
     if [ "$OS" = "windows" ]; then
         BINARY_NAME="main.exe"

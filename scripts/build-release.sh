@@ -14,16 +14,13 @@ NC='\033[0m' # No Color
 # Configuration
 BINARY_NAME="main"
 RELEASE_DIR_PREFIX="mini-proxy"
-BUILD_DIR="build"
+RELEASE_DIR_BASE="dist"
 VERSION="${1:-dev}"
 
 echo -e "${YELLOW}=== Mini-Proxy Local Build Script ===${NC}"
 echo "Version: $VERSION"
 echo ""
 
-# Create build directory
-mkdir -p "$BUILD_DIR"
-cd "$BUILD_DIR"
 
 # Get current OS and ARCH
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -40,6 +37,12 @@ elif [ "$ARCH" = "arm64" ]; then
     ARCH="arm64"
 fi
 
+BUILD_DIR="build/${OS}-${ARCH}"
+
+# Create build directory
+if [ ! -d "$BUILD_DIR" ]; then mkdir -p "$BUILD_DIR"; fi
+# cd "$BUILD_DIR"
+
 echo -e "${YELLOW}Building for: $OS-$ARCH${NC}"
 
 # Clean previous build
@@ -47,16 +50,14 @@ rm -f "$BINARY_NAME"
 
 # Sync go modules
 echo -e "${YELLOW}Syncing Go modules...${NC}"
-cd ..
 go work sync
-cd "$BUILD_DIR"
 
 # Build binary
 echo -e "${YELLOW}Building binary...${NC}"
 GOOS="$OS" GOARCH="$ARCH" go build \
-    -o "$BINARY_NAME" \
+    -o "$BUILD_DIR/$BINARY_NAME" \
     -ldflags="-X main.Version=$VERSION" \
-    ../webcore/main.go
+    ./webcore/main.go
 
 if [ -f "$BINARY_NAME" ]; then
     echo -e "${GREEN}✓ Binary built successfully${NC}"
@@ -67,8 +68,7 @@ else
 fi
 
 # Create release structure
-cd ..
-RELEASE_DIR="${RELEASE_DIR_PREFIX}-${OS}-${ARCH}"
+RELEASE_DIR="$RELEASE_DIR_BASE/${RELEASE_DIR_PREFIX}-${OS}-${ARCH}"
 echo -e "${YELLOW}Creating release structure in: $RELEASE_DIR${NC}"
 
 # Clean previous release
