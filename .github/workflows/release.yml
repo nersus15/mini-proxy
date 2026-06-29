@@ -87,18 +87,9 @@ jobs:
       # Windows Dependencies
       ##########################################################################
 
-      - name: Setup MSYS2
+      - name: Setup MSVC
         if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          update: true
-
-          install: >
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-librdkafka
-            mingw-w64-x86_64-sqlcipher
-            zip
+        uses: ilammy/msvc-dev-cmd@v1
 
       ##########################################################################
       # Permission
@@ -107,7 +98,15 @@ jobs:
       - name: Make Scripts Executable
         if: runner.os != 'Windows'
         run: chmod +x scripts/*.sh
-      
+
+      - name: Debug Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          where cl
+          where link
+          go env
+          
       ##########################################################################
       # Build
       ##########################################################################

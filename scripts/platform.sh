@@ -24,11 +24,11 @@ compiler_for() {
             ;;
 
         windows/amd64)
-            echo x86_64-w64-mingw32-gcc
+            echo ""
             ;;
 
         windows/arm64)
-            echo aarch64-w64-mingw32-gcc
+            echo ""
             ;;
 
         darwin/*)
@@ -86,13 +86,16 @@ build_platform() {
 
     compiler=$(compiler_for "$os" "$arch")
 
-    if ! check_compiler "$compiler"; then
+    if [[ -n "$compiler" ]]; then
 
-        warn "Skip ${os}/${arch}"
+        if ! check_compiler "$compiler"; then
 
-        warn "Compiler ${compiler} not found"
+            warn "Skip ${os}/${arch}"
+            warn "Compiler ${compiler} not found"
 
-        return 0
+            return 0
+
+        fi
 
     fi
 
@@ -111,7 +114,12 @@ build_platform() {
     export GOOS="$os"
     export GOARCH="$arch"
     export CGO_ENABLED="$(need_cgo)"
-    export CC="$compiler"
+
+    if [[ -n "$compiler" ]]; then
+        export CC="$compiler"
+    else
+        unset CC
+    fi
 
     go build \
         -trimpath \
