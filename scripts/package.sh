@@ -46,7 +46,7 @@ package_one() {
     ###############################################################
 
     cp "$ROOT_DIR/config.yaml.example" \
-        "$RELEASE_DIR/app/"
+        "$RELEASE_DIR/app/config.yaml"
 
     cp "$ROOT_DIR/go.work" \
         "$RELEASE_DIR/app/"
