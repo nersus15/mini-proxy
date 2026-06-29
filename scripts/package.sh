@@ -31,25 +31,22 @@ package_one() {
 
     rm -rf "$RELEASE_DIR"
 
-    mkdir -p "$RELEASE_DIR/app"
+    mkdir -p "$RELEASE_DIR/db"
 
     ###############################################################
     # Binary
     ###############################################################
 
-    cp "$BUILD_PATH" "$RELEASE_DIR/app/$BIN"
+    cp "$BUILD_PATH" "$RELEASE_DIR/$BIN"
 
-    chmod +x "$RELEASE_DIR/app/$BIN" 2>/dev/null || true
+    chmod +x "$RELEASE_DIR/$BIN" 2>/dev/null || true
 
     ###############################################################
     # Config
     ###############################################################
 
     cp "$ROOT_DIR/config.yaml.example" \
-        "$RELEASE_DIR/app/config.yaml"
-
-    cp "$ROOT_DIR/go.work" \
-        "$RELEASE_DIR/app/"
+        "$RELEASE_DIR/config.yaml"
 
     cp "$ROOT_DIR/docker-compose.yml" \
         "$RELEASE_DIR/docker-compose.yml"
