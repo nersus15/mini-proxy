@@ -1,0 +1,164 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+
+    name: Build (${{ matrix.name }})
+
+    runs-on: ${{ matrix.os }}
+
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+
+          - name: linux
+            os: ubuntu-latest
+
+          - name: macos-intel
+            os: macos-13
+
+          - name: macos-arm
+            os: macos-14
+
+          - name: windows
+            os: windows-latest
+
+    steps:
+
+      ##########################################################################
+      # Checkout
+      ##########################################################################
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      ##########################################################################
+      # Go
+      ##########################################################################
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      ##########################################################################
+      # Linux Dependencies
+      ##########################################################################
+
+      - name: Install Linux Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            librdkafka-dev \
+            libsqlcipher-dev \
+            zip
+
+      ##########################################################################
+      # macOS Dependencies
+      ##########################################################################
+
+      - name: Install macOS Dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install \
+            pkg-config \
+            librdkafka \
+            sqlcipher
+
+      ##########################################################################
+      # Windows Dependencies
+      ##########################################################################
+
+      - name: Setup MSYS2
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+
+          install: >
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-librdkafka
+            mingw-w64-x86_64-sqlcipher
+            zip
+
+      ##########################################################################
+      # Permission
+      ##########################################################################
+
+      - name: Make Scripts Executable
+        if: runner.os != 'Windows'
+        run: chmod +x scripts/*.sh
+
+      ##########################################################################
+      # Build
+      ##########################################################################
+
+      - name: Build
+        shell: bash
+        run: |
+          ./scripts/build.sh ${{ github.ref_name }}
+
+      ##########################################################################
+      # Upload
+      ##########################################################################
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/
+
+  ##########################################################################
+  # Release
+  ##########################################################################
+
+  release:
+
+    name: GitHub Release
+
+    needs: build
+
+    runs-on: ubuntu-latest
+
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Merge Artifacts
+        run: |
+          mkdir release
+
+          find artifacts -type f -exec cp {} release/ \;
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
