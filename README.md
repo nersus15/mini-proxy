@@ -81,7 +81,7 @@ Akibatnya:
 
 ## Recommendation
 
-Untuk pengguna Windows, sangat disarankan menggunakan Docker.
+Untuk pengguna Windows, hanya saat ini hanya bisa menggunakan Docker.
 
 ```bash
 docker compose up -d
@@ -103,7 +103,7 @@ scripts/README.md
 
 # Releases
 
-Semua release resmi tersedia pada halaman **GitHub Releases**.
+Semua release tersedia pada halaman **GitHub Releases**.
 
 Setiap release menyertakan:
 
