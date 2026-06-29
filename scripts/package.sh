@@ -51,10 +51,10 @@ package_one() {
     cp "$ROOT_DIR/go.work" \
         "$RELEASE_DIR/app/"
 
-    cp "$ROOT_DIR/docker-compose-barebone.yml" \
+    cp "$ROOT_DIR/docker-compose.yml" \
         "$RELEASE_DIR/docker-compose.yml"
 
-    cp "$ROOT_DIR/Dockerfile.barebone" \
+    cp "$ROOT_DIR/Dockerfile" \
         "$RELEASE_DIR/Dockerfile"
 
     ###############################################################
