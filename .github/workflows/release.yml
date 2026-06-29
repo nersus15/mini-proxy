@@ -110,6 +110,11 @@ jobs:
       - name: Make Scripts Executable
         if: runner.os != 'Windows'
         run: chmod +x scripts/*.sh
+      
+      - name: Debug Go
+        run: |
+          go env
+          go work sync
 
       ##########################################################################
       # Build
