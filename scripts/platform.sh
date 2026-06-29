@@ -123,7 +123,6 @@ build_platform() {
     # fi
 
     go build \
-        # "${build_args[@]}" \
         -trimpath \
         -buildvcs=false \
         -ldflags="$(ldflags "$os" "$arch")" \

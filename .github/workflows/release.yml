@@ -132,26 +132,6 @@ jobs:
         if: runner.os != 'Windows'
         run: chmod +x scripts/*.sh
 
-      - name: Debug Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          where gcc
-          where pkg-config
-
-          echo "========================"
-          echo "Environment"
-          echo "========================"
-
-          echo "CC=$env:CC"
-          echo "CXX=$env:CXX"
-          echo "PKG_CONFIG=$env:PKG_CONFIG"
-          echo "PKG_CONFIG_PATH=$env:PKG_CONFIG_PATH"
-
-          & $env:PKG_CONFIG --version
-          & $env:PKG_CONFIG --modversion rdkafka
-
-          go env
       ##########################################################################
       # Build
       ##########################################################################
