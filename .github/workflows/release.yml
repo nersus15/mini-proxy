@@ -111,10 +111,17 @@ jobs:
       # Build
       ##########################################################################
 
-      - name: Build
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           ./scripts/build.sh ${{ github.ref_name }}
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          bash ./scripts/build.sh $env:GITHUB_REF_NAME
 
       ##########################################################################
       # Upload
