@@ -3,7 +3,7 @@ module github.com/nersus15/mini-proxy
 go 1.25.0
 
 require (
-	github.com/nersus15/lib-go-cron v0.0.0-20260512072729-8a5337f80c08
+	github.com/nersus15/lib-go-cron v0.1.0
 	github.com/nersus15/lib-sqlchiper v0.1.1
 	github.com/webcore-go/lib-kafka v0.1.8
 	github.com/webcore-go/lib-memory v0.1.3

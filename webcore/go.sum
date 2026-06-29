@@ -161,8 +161,7 @@ github.com/mutecomm/go-sqlcipher/v4 v4.4.2 h1:eM10bFtI4UvibIsKr10/QT7Yfz+NADfjZY
 github.com/mutecomm/go-sqlcipher/v4 v4.4.2/go.mod h1:mF2UmIpBnzFeBdu/ypTDb/LdbS0nk0dfSN1WUsWTjMA=
 github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f h1:y5//uYreIhSUg3J1GEMiLbxo1LJaP8RfCpH6pymGZus=
 github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=
-github.com/nersus15/lib-go-cron v0.0.0-20260512072729-8a5337f80c08 h1:HBcikQmrcS3lmhLdZf50g59hmF2mxlwmUkfuMKjKyPc=
-github.com/nersus15/lib-go-cron v0.0.0-20260512072729-8a5337f80c08/go.mod h1:fEFqab18vKEuhoAOfhboR9lO/U5uUXGgcR6vuYZAA7U=
+github.com/nersus15/lib-go-cron v0.1.0 h1:xdyt/kQMD9GLlizdtnGtSTvQeUzGOJWj6lOUjRw1ebU=
 github.com/nersus15/lib-sqlchiper v0.1.1 h1:CQ2tPUGEaOcw20KHSf49bsSQSWNSt1gnuFAHbD/HgQo=
 github.com/nersus15/lib-sqlchiper v0.1.1/go.mod h1:3F7gpNhnxq6cS5rTj15Y163P5YtAjony6g+kOfeH0sw=
 github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=

@@ -6,7 +6,7 @@ require (
 	github.com/goccy/go-json v0.10.6
 	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/google/uuid v1.6.0
-	github.com/nersus15/lib-go-cron v0.0.0-20260512072729-8a5337f80c08
+	github.com/nersus15/lib-go-cron v0.1.0
 	github.com/pressly/goose/v3 v3.27.0
 	github.com/samply/golang-fhir-models/fhir-models v0.3.2
 	github.com/uptrace/bun v1.2.18
