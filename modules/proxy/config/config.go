@@ -103,7 +103,7 @@ func (c *ModuleConfig) SetDefaults() map[string]any {
 		"module.fhir.ildki.development_authurl": "https://api.ildki.appgo.my.id/dev/oauth2/v1/accesstoken?grant_type=client_credentials",
 		"module.fhir.ildki.production_authurl":  "https://api.ildki.appgo.my.id/prod/oauth2/v1/accesstoken?grant_type=client_credentials",
 		"module.fhir.ildki.zero_trust":          false,
-		"module.fhir.ildki.backup_baseurl":      "https://api-debug.ildki.appgo.my.id",
+		"module.fhir.ildki.backup_baseurl":      "",
 
 		"module.fhir.satusehat_prod.baseurl":       "https://api-satusehat.kemkes.go.id/fhir-r4/v1",
 		"module.fhir.satusehat_prod.authurl":       "https://api-satusehat.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials",

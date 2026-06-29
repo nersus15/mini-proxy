@@ -61,7 +61,7 @@ func (s *TaskService) ProcessRetryTasks(token *string) {
 			}
 		}
 
-		if tasks[i].RetryCount >= int(s.Config.Cron.BackupLimit) {
+		if tasks[i].RetryCount >= int(s.Config.Cron.BackupLimit) && s.Config.Ildki.BackupBaseUrl != "" {
 			newUrl, err := ReplaceHostname(tasks[i].Url, s.Config.Ildki.BackupBaseUrl)
 			if err == nil {
 				newUrl = strings.ReplaceAll(newUrl, "api/", "")
