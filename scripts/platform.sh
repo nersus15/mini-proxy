@@ -159,7 +159,7 @@ build_host() {
             else
                 build_platform windows amd64
             fi
-
+            ;;
         *)
 
             die "Unsupported host: ${HOST_OS}"
