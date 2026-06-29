@@ -1,181 +1,406 @@
-# Mini-Proxy Build and Release Scripts
+# Mini Proxy Build System
 
-Kumpulan script untuk membantu build dan release mini-proxy.
+Build system untuk **mini-proxy** yang mendukung build lokal, packaging, checksum, dan GitHub Actions.
 
-## Scripts
+## Requirements
 
-### 1. `build-release.sh`
-Build release package untuk platform lokal Anda.
+- Go 1.25+
+- Git
+- Bash
+- pkg-config
+- C Compiler (sesuai platform)
 
-**Usage:**
-```bash
-# Build dengan versi default
-./scripts/build-release.sh
+### Linux
 
-# Build dengan versi spesifik
-./scripts/build-release.sh v1.0.0
+- gcc
+- librdkafka-dev
+- libsqlcipher-dev
+
+### macOS
+
+- Xcode Command Line Tools
+- clang
+- librdkafka
+- sqlcipher
+
+### Windows
+
+- MSYS2
+- MinGW GCC
+- librdkafka
+- SQLCipher
+
+---
+
+# Scripts
+
+```
+scripts/
+├── build.sh
+├── release.sh
+├── doctor.sh
+├── package.sh
+├── common.sh
+├── platform.sh
+└── build.conf
 ```
 
-**Output:**
-- Folder: `mini-proxy-{os}-{arch}/`
-- Archive: `mini-proxy-{os}-{arch}.tar.gz`
+---
 
-### 2. `build-all-platforms.sh`
-Build release package untuk SEMUA platform yang didukung (Linux, macOS, Windows) dengan arsitektur (amd64, arm64).
+# doctor.sh
 
-**Usage:**
+Memeriksa apakah environment build sudah siap.
+
 ```bash
-# Build semua platform dengan versi default
-./scripts/build-all-platforms.sh
-
-# Build semua platform dengan versi spesifik
-./scripts/build-all-platforms.sh v1.0.0
+./scripts/doctor.sh
 ```
 
-**Output:**
-- Multiple folders: `mini-proxy-{os}-{arch}/`
-- Multiple archives: `mini-proxy-{os}-{arch}.tar.gz`
+Contoh output:
 
-**Platforms:**
-- Linux x86_64
-- Linux ARM64
-- macOS x86_64
-- macOS ARM64
-- Windows x86_64
-
-### 3. `pre-release-checklist.sh`
-Interactive checklist untuk memastikan semua persiapan release sudah selesai.
-
-**Usage:**
-```bash
-./scripts/pre-release-checklist.sh
+```
+Go               OK
+Git              OK
+pkg-config       OK
+GCC              OK
+Tar              OK
+Zip              OK
 ```
 
-**Checks:**
-- Code changes complete and tested
-- All tests passing
-- Dependencies updated
-- Version bumped
-- Changelog updated
-- README updated
-- All commits pushed
-- (Interactive prompt untuk create tag)
+---
 
-## Workflow
+# build.sh
 
-### Option 1: Local Build Testing
-Gunakan untuk test build lokal sebelum push ke GitHub:
+Melakukan build binary.
+
+Secara default hanya membangun **platform host**.
 
 ```bash
-# Build untuk platform lokal
-make release-local
-
-# Extract dan test
-tar -xzf mini-proxy-linux-amd64.tar.gz
-cd mini-proxy-linux-amd64
-./app/main proxy
+./scripts/build.sh
 ```
 
-### Option 2: Cross-Platform Local Build
-Gunakan untuk build dan test untuk semua platform lokal:
+Build dengan versi tertentu.
 
 ```bash
-# Build semua platform
+./scripts/build.sh v1.0.0
+```
+
+Build semua target yang didefinisikan di `build.conf`.
+
+```bash
+./scripts/build.sh --all
+```
+
+Build semua target dengan versi tertentu.
+
+```bash
+./scripts/build.sh v1.0.0 --all
+```
+
+Output:
+
+```
+build/
+├── linux-amd64/
+├── linux-arm64/
+├── darwin-arm64/
+└── windows-amd64/
+```
+
+---
+
+# release.sh
+
+Melakukan proses release lengkap.
+
+Tahapan yang dijalankan:
+
+1. Doctor
+2. Workspace Sync
+3. Build
+4. Package
+5. SHA256 Checksum
+6. Verify Checksum
+
+Default hanya membangun platform host.
+
+```bash
+./scripts/release.sh
+```
+
+Versi tertentu.
+
+```bash
+./scripts/release.sh v1.0.0
+```
+
+Semua platform.
+
+```bash
+./scripts/release.sh --all
+```
+
+Semua platform dengan versi tertentu.
+
+```bash
+./scripts/release.sh v1.0.0 --all
+```
+
+Output:
+
+```
+dist/
+
+mini-proxy-v1.0.0-linux-amd64.tar.gz
+mini-proxy-v1.0.0-linux-arm64.tar.gz
+mini-proxy-v1.0.0-darwin-arm64.tar.gz
+mini-proxy-v1.0.0-windows-amd64.zip
+SHA256SUMS
+```
+
+---
+
+# Package Format
+
+Linux/macOS
+
+```
+mini-proxy-v1.0.0-linux-amd64.tar.gz
+```
+
+Windows
+
+```
+mini-proxy-v1.0.0-windows-amd64.zip
+```
+
+Setiap package berisi:
+
+```
+mini-proxy/
+├── mini-proxy
+├── config.yaml.example
+├── build.json
+├── LICENSE
+└── README.md
+```
+
+Windows:
+
+```
+mini-proxy.exe
+```
+
+---
+
+# Build Metadata
+
+Binary menyimpan metadata berikut:
+
+- Version
+- Commit
+- Branch
+- Tag
+- Build Date
+- Builder
+- Host
+- Go Version
+- Platform
+- Architecture
+
+---
+
+# SHA256
+
+Release otomatis membuat checksum.
+
+```
+dist/
+├── mini-proxy-v1.0.0-linux-amd64.tar.gz
+├── mini-proxy-v1.0.0-windows-amd64.zip
+└── SHA256SUMS
+```
+
+Verifikasi:
+
+Linux
+
+```bash
+sha256sum -c SHA256SUMS
+```
+
+macOS
+
+```bash
+shasum -a 256 -c SHA256SUMS
+```
+
+---
+
+# GitHub Actions
+
+Workflow GitHub Actions menggunakan `build.sh`.
+
+Setiap runner hanya membangun platform miliknya sendiri.
+
+| Runner | Output |
+|---------|--------|
+| Ubuntu | Linux |
+| macOS | macOS |
+| Windows | Windows |
+
+Selanjutnya GitHub Actions akan:
+
+- Upload artifact
+- Menggabungkan semua artifact
+- Membuat GitHub Release
+- Mengunggah seluruh package release
+
+---
+
+# Makefile
+
+Build host
+
+```bash
+make build
+```
+
+Build semua platform
+
+```bash
+make build-all
+```
+
+Release host
+
+```bash
+make release
+```
+
+Release semua platform
+
+```bash
 make release-all
-
-# Atau dengan versi spesifik
-make release-version VERSION=v1.0.0
 ```
 
-### Option 3: GitHub Automatic Release (Recommended)
-Gunakan untuk production release melalui GitHub Actions:
+---
+
+# Directory Structure
+
+```
+build/
+```
+
+Berisi hasil build sementara.
+
+```
+dist/
+```
+
+Berisi package release final.
+
+---
+
+# Troubleshooting
+
+### Permission denied
 
 ```bash
-# 1. Prepare
-./scripts/pre-release-checklist.sh
-
-# 2. Create and push tag
-git tag v1.0.0
-git push origin v1.0.0
-
-# 3. GitHub Actions akan otomatis:
-#    - Build untuk semua platform
-#    - Create release package
-#    - Upload ke GitHub Releases
+chmod +x scripts/*.sh
 ```
 
-## Makefile Targets
+---
+
+### Go Workspace
+
+Sinkronisasi manual.
 
 ```bash
-# Build local release
-make release-local
-
-# Build semua platform lokal
-make release-all
-
-# Build semua platform dengan versi
-make release-version VERSION=v1.0.0
+go work sync
 ```
 
-## File Structure dalam Release
+---
 
-```
-mini-proxy-linux-amd64/
-├── app/
-│   ├── main                    # Binary Go (sudah executable)
-│   ├── config.yaml.example     # Configuration template
-│   └── go.work                 # Go workspace file
-├── Dockerfile                  # For Docker image build
-├── docker-compose.yml          # For Docker Compose
-└── webcore/                    # Source code reference
-    ├── main.go
-    ├── go.mod
-    ├── go.sum
-    └── ...
-```
-
-## Menggunakan Release Package
+### Bersihkan hasil build
 
 ```bash
-# 1. Download dan extract
-tar -xzf mini-proxy-linux-amd64.tar.gz
-cd mini-proxy-linux-amd64
-
-# 2. Setup konfigurasi
-cp app/config.yaml.example app/config.yaml
-# Edit app/config.yaml sesuai kebutuhan
-
-# 3. Jalankan aplikasi
-./app/main proxy
-
-# 4. Atau gunakan Docker
-docker-compose up -d
+rm -rf build dist
 ```
 
-## Troubleshooting
+---
 
-### Script permission denied
+# Build Flow
+
+```
+doctor.sh
+      │
+      ▼
+go work sync
+      │
+      ▼
+go build
+      │
+      ▼
+package.sh
+      │
+      ▼
+SHA256SUMS
+      │
+      ▼
+Verify Checksum
+```
+
+---
+
+# Notes
+
+- Build lokal hanya membangun platform host.
+- Gunakan `--all` untuk membangun seluruh platform yang didefinisikan pada `build.conf`.
+- GitHub Actions membangun setiap platform pada runner masing-masing sehingga tidak memerlukan cross-compiler.
+- Package release selalu disertai `build.json` dan `SHA256SUMS`.
+- Folder sementara di `build/` akan dihapus setelah package berhasil dibuat.
+- Nama file binary bisa ditentukan pada `build.conf`
+
+
+# Known Issues
+
+## Windows
+
+> **Status:** Experimental
+
+Saat ini build native Windows **belum didukung secara penuh**.
+
+Hal ini disebabkan oleh dependency native berikut:
+
+- SQLCipher
+- librdkafka (confluent-kafka-go)
+
+Kedua library tersebut masih mengalami kendala kompatibilitas pada proses linking menggunakan toolchain Windows (MinGW/MSYS2 maupun MSVC) sehingga:
+
+- ❌ Build GitHub Actions untuk Windows belum berhasil.
+- ❌ Build native Windows menggunakan `build.sh` atau `release.sh` belum dapat menghasilkan binary yang stabil.
+
+### Rekomendasi
+
+Untuk pengguna Windows, jalankan Mini Proxy menggunakan **Docker**.
+
 ```bash
-chmod +x ./scripts/*.sh
+docker compose up -d
 ```
 
-### Build gagal karena Go tidak terinstall
+atau
+
 ```bash
-# Install Go 1.25+
-go version  # Check version
+docker compose -f docker-compose.yml up -d
 ```
 
-### tar.gz extraction di Windows
-Gunakan: 7-Zip, WinRAR, atau WSL untuk extract
+Docker menggunakan image Linux sehingga seluruh dependency native telah tersedia dan lebih stabil dibandingkan menjalankan binary Windows secara langsung.
 
-### Binary not executable di Linux/macOS
-```bash
-chmod +x mini-proxy-*/app/main
-```
+### Status Platform
 
-## Notes
-
-- Semua script otomatis `go work sync` sebelum build
-- Binary pre-built, user tidak perlu compile ulang
-- Cross-platform compatible (Linux, macOS, Windows)
-- Archive format tar.gz untuk universal compatibility
+| Platform | Binary | Docker | Status |
+|----------|:------:|:------:|:------:|
+| Linux | ✅ | ✅ | Supported |
+| macOS (Apple Silicon) | ✅ | ✅ | Supported |
+| Windows Native | ❌ | - | Experimental |
+| Windows (Docker) | ✅ | ✅ | Recommended |
