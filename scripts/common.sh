@@ -100,9 +100,47 @@ GO_VERSION="$(go version | awk '{print $3}')"
 
 BUILD_HOST="$(hostname)"
 
-HOST_OS="$(uname | tr '[:upper:]' '[:lower:]')"
 
-HOST_ARCH="$(uname -m)"
+###############################################################################
+# Host Platform
+###############################################################################
+
+case "$(uname -s)" in
+
+    Linux*)
+        HOST_OS="linux"
+        ;;
+
+    Darwin*)
+        HOST_OS="darwin"
+        ;;
+
+    MINGW*|MSYS*|CYGWIN*)
+        HOST_OS="windows"
+        ;;
+
+    *)
+        HOST_OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        ;;
+
+esac
+
+case "$(uname -m)" in
+
+    x86_64|amd64)
+        HOST_ARCH="amd64"
+        ;;
+
+    arm64|aarch64)
+        HOST_ARCH="arm64"
+        ;;
+
+    *)
+        HOST_ARCH="$(uname -m)"
+        ;;
+
+esac
+
 
 ###############################################################################
 # Builder
@@ -309,3 +347,4 @@ cat > "$DIR/build.json" <<EOF
 EOF
 
 }
+
