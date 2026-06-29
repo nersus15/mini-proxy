@@ -153,6 +153,12 @@ build_host() {
             fi
 
             ;;
+        windows)
+            if [[ "${HOST_ARCH}" == "arm64" ]]; then
+                build_platform windows arm64
+            else
+                build_platform windows amd64
+            fi
 
         *)
 

@@ -28,9 +28,6 @@ jobs:
           - name: linux
             os: ubuntu-latest
 
-          - name: macos-intel
-            os: macos-13
-
           - name: macos-arm
             os: macos-14
 
