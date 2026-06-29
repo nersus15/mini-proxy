@@ -83,13 +83,46 @@ jobs:
             librdkafka \
             sqlcipher
 
-      ##########################################################################
+      ##############################################################################
       # Windows Dependencies
-      ##########################################################################
+      ##############################################################################
 
-      - name: Setup MSVC
+      - name: Setup MSYS2
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-librdkafka
+            mingw-w64-x86_64-sqlcipher
+            mingw-w64-x86_64-openssl
+            zip
+
+      ##############################################################################
+      # Configure Windows Environment
+      ##############################################################################
+
+      - name: Configure Windows Environment
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "C:\msys64\mingw64\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+          "CC=gcc" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "CXX=g++" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+          "PKG_CONFIG=C:\msys64\mingw64\bin\pkg-config.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "PKG_CONFIG_PATH=C:\msys64\mingw64\lib\pkgconfig" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+          "CGO_ENABLED=1" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+          "CGO_CFLAGS=-IC:\msys64\mingw64\include" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+          "CGO_LDFLAGS=-LC:\msys64\mingw64\lib" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
 
       ##########################################################################
       # Permission
@@ -103,10 +136,22 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          where cl
-          where link
+          where gcc
+          where pkg-config
+
+          echo "========================"
+          echo "Environment"
+          echo "========================"
+
+          echo "CC=$env:CC"
+          echo "CXX=$env:CXX"
+          echo "PKG_CONFIG=$env:PKG_CONFIG"
+          echo "PKG_CONFIG_PATH=$env:PKG_CONFIG_PATH"
+
+          & $env:PKG_CONFIG --version
+          & $env:PKG_CONFIG --modversion rdkafka
+
           go env
-          
       ##########################################################################
       # Build
       ##########################################################################

@@ -102,7 +102,7 @@ build_platform() {
     mkdir -p "$output"
 
     local binary
-    local -a build_args=()
+    # local -a build_args=()
 
     binary=$(binary_name "$os")
 
@@ -118,12 +118,12 @@ build_platform() {
         unset CC
     fi
 
-    if [[ "$os" == "windows" ]]; then
-        build_args+=("-tags" "dynamic")
-    fi
+    # if [[ "$os" == "windows" ]]; then
+    #     build_args+=("-tags" "dynamic")
+    # fi
 
     go build \
-        "${build_args[@]}" \
+        # "${build_args[@]}" \
         -trimpath \
         -buildvcs=false \
         -ldflags="$(ldflags "$os" "$arch")" \
