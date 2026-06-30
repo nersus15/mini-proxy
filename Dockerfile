@@ -11,8 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY ./webcore /usr/local/bin/webcore
+COPY ./main /usr/local/bin/webcore
 COPY ./config.yaml ./config.yaml
+COPY ./webcore ./webcore
+COPY ./db ./db
+
 
 # Siapkan folder untuk sqlite (opsional)
 RUN mkdir -p /var/miniproxy
