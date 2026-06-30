@@ -4,7 +4,7 @@ services:
   mini-proxy:
     build: .
     ports:
-      - "2022:7272"
+      - "7272:2022"
     environment:
       - APP_ENV=development
     networks:
