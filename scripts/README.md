@@ -44,6 +44,27 @@ scripts/
 ├── platform.sh
 └── build.conf
 ```
+---
+
+## File Structure di Release
+
+```
+mini-proxy-{os}-{arch}/
+├── db/                   # Folder yang disiapkan untuk tempat database sqlite (opsional)
+├── Dockerfile            # Untuk build Docker image
+├── docker-compose.yml    # Untuk run dengan Docker Compose
+├── webcore               # File binnary
+├── config.yaml           # File config bawaan
+└── webcore/              # File migrations
+
+```
+
+## Notes
+
+- Binary sudah pre-built, user tidak perlu build ulang
+- Edit file `config.yaml` sebelum jalankan
+- Semua platform didukung: Linux, macOS, Windows
+- Archive dalam format tar.gz untuk cross-platform compatibility
 
 ---
 

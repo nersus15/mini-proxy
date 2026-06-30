@@ -32,6 +32,28 @@ Mini Proxy adalah reverse proxy berbasis Go yang dirancang untuk memproses, memo
 
 ---
 
+
+## Project Structure
+
+```
+mini-proxy/
+├── webcore/              # Main application
+│   ├── main.go
+│   ├── proxy/           # Proxy implementation
+│   ├── init/            # Initialization
+│   └── go.mod
+├── modules/             # Additional modules
+│   └── proxy/
+├── config.yaml          # Configuration
+├── Dockerfile           # Production Docker image
+├── Dockerfile.barebone  # Barebone Docker image
+├── docker-compose*.yml  # Docker Compose files
+├── Makefile            # Build targets
+├── scripts/            # Build and release scripts
+└── README.md           # This file
+```
+
+---
 # Running Mini Proxy
 
 ## Linux (Native)

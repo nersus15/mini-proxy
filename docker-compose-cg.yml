@@ -1,5 +1,0 @@
-services:
-  chainguard:
-    image: fathur15/mini-proxy
-    # command: ["sleep", "infinity"]
-    command: ["/app/main", "proxy"]
