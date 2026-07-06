@@ -11,7 +11,6 @@ import (
 	"github.com/nersus15/mini-proxy/mod-proxy/handler"
 	"github.com/nersus15/mini-proxy/mod-proxy/repository"
 	"github.com/nersus15/mini-proxy/mod-proxy/service"
-	kafka "github.com/webcore-go/lib-kafka"
 	"github.com/webcore-go/webcore/app/core"
 	appConfig "github.com/webcore-go/webcore/infra/config"
 	"github.com/webcore-go/webcore/infra/logger"
@@ -31,7 +30,6 @@ type Module struct {
 	handler     *handler.HttpHandler
 	routes      []*core.ModuleRoute
 	memory      port.ICacheMemory
-	kafka       *kafka.KafkaProducer
 	cron        *cron.CronLibrary
 	taskService *service.TaskService
 }
@@ -90,20 +88,7 @@ func (m *Module) Init(ctx *core.AppContext) error {
 		}
 	}
 
-	if m.config.Kafka.Enabled {
-		loader, err := core.Instance().Context.GetDefaultLibraryLoader("kafka:producer")
-		if err != nil {
-			return err
-		}
-		libKafka, err := core.Instance().Context.LoadSingletonInstance(loader, ctx.Config.Kafka)
-		if err != nil {
-			return err
-		}
-
-		m.kafka = libKafka.(*kafka.KafkaProducer)
-	}
-
-	m.service = service.NewProxyService(ctx, m.config, m.repository, m.kafka)
+	m.service = service.NewProxyService(ctx, m.config, m.repository)
 	m.handler = handler.NewHandler(ctx, m.config, m.service)
 	m.taskService = service.NewTaskService(m.repository, m.service, m.config)
 
