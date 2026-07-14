@@ -47,7 +47,8 @@ func (s *TaskService) ProcessRetryTasks(token *string) {
 		if token == nil {
 			var payload map[string]json.RawMessage
 			if err := json.Unmarshal(tasks[i].Payload, &payload); err != nil {
-				panic(err)
+				logger.Error(err.Error())
+				continue
 			}
 
 			env := tasks[i].Env
@@ -100,7 +101,8 @@ func (s *TaskService) executeAction(task entity.Transactions) string {
 	// Logika pengiriman data sebenarnya di sini
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(task.Payload, &payload); err != nil {
-		panic(err)
+		logger.Error(err.Error())
+		return err.Error()
 	}
 	logger.InfoJson("MenjalankanTask", map[string]any{
 		"id":          task.ID,
