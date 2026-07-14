@@ -103,7 +103,7 @@ func (h *HttpHandler) PostResource(c *fiber.Ctx) error {
 	// 	res, raw, errcode, errstr = h.proxyService.PostBundle(env, resourceType, c)
 	// }
 	if errstr != "" {
-		if *res.ResourceType == "OperationOutcome" {
+		if res != nil && res.ResourceType != nil && *res.ResourceType == "OperationOutcome" {
 			return c.Status(fiber.StatusBadRequest).JSON(raw)
 		}
 
