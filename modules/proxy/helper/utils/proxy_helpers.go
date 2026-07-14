@@ -27,7 +27,7 @@ func ResolveTokenEndpoint(env, target string, cfg *config.ModuleConfig) string {
 	}
 
 	if target == "ildki" {
-		return cfg.Ildki.ProductionURL
+		return cfg.Ildki.ProdAuthUrl
 	}
 	return cfg.SatSetProd.AuthURL
 }
