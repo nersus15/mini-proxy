@@ -6,6 +6,7 @@
 CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     env TEXT NOT NULL,
+    client TEXT NOT NULL,
     type TEXT NOT NULL,
     url TEXT NOT NULL,
     resource_type TEXT NOT NULL,
@@ -19,7 +20,8 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_transactions_status_retry ON transactions (status, retry_count);
-
+CREATE INDEX IF NOT EXISTS idx_transactions_client ON transactions(client);
+CREATE INDEX IF NOT EXISTS idx_transactions_resource_status ON transactions(resource_type, status);
 
 -- ==========================================================
 -- 2. CLIENT CREDENTIALS TABLE & INDEX
