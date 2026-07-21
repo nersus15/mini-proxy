@@ -8,97 +8,152 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/nersus15/mini-proxy/mod-proxy/config"
 	"github.com/nersus15/mini-proxy/mod-proxy/entity"
+	"github.com/nersus15/mini-proxy/mod-proxy/helper/types"
 	"github.com/nersus15/mini-proxy/mod-proxy/helper/utils"
 	"github.com/nersus15/mini-proxy/mod-proxy/repository"
 	"github.com/webcore-go/webcore/infra/logger"
 )
 
 type TaskService struct {
-	Repository *repository.ProxyRepository
-	Proxy      *ProxyService
-	Config     *config.ModuleConfig
+	Repository           *repository.ProxyRepository
+	Proxy                *ProxyService
+	Config               *config.ModuleConfig
+	resourceProcessing   int32
+	credentialProcessing int32
 }
 
 func NewTaskService(r *repository.ProxyRepository, p *ProxyService, config *config.ModuleConfig) *TaskService {
 	return &TaskService{Repository: r, Proxy: p, Config: config}
 }
-
-// Task yang akan dijalankan oleh Cron
-func (s *TaskService) ProcessRetryTasks(token *string) {
-	// limit = 0 -> unlimited
-	tasks, err := s.Repository.GetPendingTransactions(token, s.Config.Cron.ChunkSize)
-	if err != nil {
-		fmt.Println("Error fetching tasks:", err)
+func (s *TaskService) ProcessResourceRetryTasks() {
+	if !atomic.CompareAndSwapInt32(&s.resourceProcessing, 0, 1) {
+		logger.Warn("ProcessResourceRetryTasks dilewati: eksekusi sebelumnya masih berjalan, mencegah duplikasi pengiriman resource ke ILDKI")
 		return
 	}
+	defer atomic.StoreInt32(&s.resourceProcessing, 0)
 
-	logger.Info("Available Task", len(tasks))
-	// Get Token Yang Terbaru
-	newTokens := s.Repository.GetToken()
-	logger.InfoJson("Token Yang Akan Digunakan", newTokens)
+	tasks, err := s.Repository.GetPendingTransactions(nil, s.Config.Cron.ChunkSize)
+	if err != nil {
+		logger.Error("Gagal mengambil resource retry tasks", "err", err)
+		return
+	}
+	logger.Info("Resource Retry Tasks Tersedia", len(tasks))
+
+	newTokens := s.Repository.GetToken(nil)
+	logger.InfoJson("Token Untuk Refresh Authorization", newTokens)
 
 	for i := range tasks {
-		fmt.Printf("Processing Task ID: %s (Retry: %d, ErrLimit: %d)\n", tasks[i].ID, tasks[i].RetryCount, s.Config.Cron.BackupLimit)
-
-		if token == nil {
-			var payload map[string]json.RawMessage
-			if err := json.Unmarshal(tasks[i].Payload, &payload); err != nil {
-				logger.Error(err.Error())
-				continue
-			}
-
-			env := tasks[i].Env
-			if _, ok := newTokens[env]; ok {
-				newAuthorization, _ := json.Marshal(newTokens[env])
-				payload["authorization"] = newAuthorization
-			}
-			tasks[i].Payload, err = json.Marshal(payload)
-			if err != nil {
-				logger.ErrorJson("Gagal Marshall Payload", err)
-			}
+		if err := refreshTaskAuthorization(&tasks[i], newTokens); err != nil {
+			logger.Error("Gagal refresh authorization task, dilewati", "id", tasks[i].ID, "err", err)
+			continue
 		}
+		s.applyBackupHostnameFallback(&tasks[i])
+	}
+	s.runRetryBatch(tasks, false)
+}
+func (s *TaskService) ProcessCredentialRetryTasks() {
+	if !atomic.CompareAndSwapInt32(&s.credentialProcessing, 0, 1) {
+		logger.Warn("ProcessCredentialRetryTasks dilewati: eksekusi sebelumnya masih berjalan, mencegah duplikasi sync credential ke ILDKI")
+		return
+	}
+	defer atomic.StoreInt32(&s.credentialProcessing, 0)
 
-		if tasks[i].RetryCount >= int(s.Config.Cron.BackupLimit) && s.Config.Ildki.BackupBaseUrl != "" {
-			newUrl, err := ReplaceHostname(tasks[i].Url, s.Config.Ildki.BackupBaseUrl)
-			if err == nil {
-				newUrl = strings.ReplaceAll(newUrl, "api/", "")
-				tasks[i].Url = newUrl
-			}
-			logger.Info(fmt.Sprintf("Hostname Error Fallback TO alternative Domain(%s) .....", tasks[i].Url))
-		}
+	tasks, err := s.Repository.GetPendingCredentialTransactions(s.Config.Cron.ChunkSize)
+	if err != nil {
+		logger.Error("Gagal mengambil credential retry tasks", "err", err)
+		return
+	}
+	logger.Info("Credential Retry Tasks Tersedia", len(tasks))
 
+	for i := range tasks {
+		s.applyBackupHostnameFallback(&tasks[i])
+	}
+	s.runRetryBatch(tasks, true)
+}
+
+func (s *TaskService) SyncCredential() {
+	logger.Info("Jalankan Job Untuk Sinkronisasi Credential")
+	s.ProcessCredentialRetryTasks()
+}
+
+func (s *TaskService) runRetryBatch(tasks []entity.Transactions, credOnlyCleanup bool) {
+	for i := range tasks {
 		errMsg := s.executeAction(tasks[i])
 		if errMsg == "" {
 			tasks[i].Status = "COMPLETED"
 			tasks[i].ErrorMessage = ""
 		} else {
-			fmt.Printf("Task %s failed: %s. Continuing next task...\n", tasks[i].ID, errMsg)
-
+			logger.Warn("Task gagal, akan di-retry siklus berikutnya", "id", tasks[i].ID, "retryCount", tasks[i].RetryCount, "err", errMsg)
 			tasks[i].Status = "RETRY"
 			tasks[i].RetryCount = tasks[i].RetryCount + 1
 			tasks[i].ErrorMessage = errMsg
 		}
 	}
 
-	logger.Info("Loop finished, starting bulk update...")
-	if len(tasks) > 0 {
-		err := s.Repository.UpdateBulkTransactions(tasks)
-		if err != nil {
-			logger.DebugJson("Bulk Update Error:", err)
-		}
+	if len(tasks) == 0 {
+		return
+	}
 
-		// CleanUp
-		logger.Info("Start Cleanup Completed Tasks.....")
-		s.Repository.DeleteOldTransactions("COMPLETED", token != nil)
+	logger.Info("Selesai proses batch, mulai bulk update...")
+	if err := s.Repository.UpdateBulkTransactions(tasks); err != nil {
+		logger.Error("Bulk Update Error", "err", err)
+	}
+
+	logger.Info("Bersihkan transaksi COMPLETED...")
+	if _, err := s.Repository.DeleteOldTransactions("COMPLETED", credOnlyCleanup); err != nil {
+		logger.Error("Gagal cleanup transaksi COMPLETED", "err", err)
 	}
 }
+func (s *TaskService) applyBackupHostnameFallback(task *entity.Transactions) {
+	if task.RetryCount < int(s.Config.Cron.BackupLimit) || s.Config.Ildki.BackupBaseUrl == "" {
+		return
+	}
 
+	newUrl, err := ReplaceHostname(task.Url, s.Config.Ildki.BackupBaseUrl)
+	if err != nil {
+		logger.Error("Gagal replace hostname untuk fallback domain", "id", task.ID, "err", err)
+		return
+	}
+
+	task.Url = strings.ReplaceAll(newUrl, "api/", "")
+	logger.Info(fmt.Sprintf("Hostname Error Fallback TO alternative Domain(%s) .....", task.Url))
+}
+func refreshTaskAuthorization(task *entity.Transactions, newTokens []types.Token) error {
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(task.Payload, &payload); err != nil {
+		return fmt.Errorf("gagal unmarshal payload: %w", err)
+	}
+
+	newToken := ""
+
+	for _, token := range newTokens {
+		if task.Client == token.ClientId && task.Env == token.Env {
+			newToken = token.AccessToken
+			break
+		}
+	}
+
+	if newToken == "" {
+		return nil
+	}
+	newAuthorization, err := json.Marshal(newToken)
+	if err != nil {
+		return fmt.Errorf("gagal marshal token baru: %w", err)
+	}
+	payload["authorization"] = newAuthorization
+	marshalled, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("gagal marshal payload: %w", err)
+	}
+	task.Payload = marshalled
+	return nil
+}
 func (s *TaskService) executeAction(task entity.Transactions) string {
-	// Logika pengiriman data sebenarnya di sini
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(task.Payload, &payload); err != nil {
 		logger.Error(err.Error())
@@ -118,19 +173,20 @@ func (s *TaskService) executeAction(task entity.Transactions) string {
 	})
 
 	body, _ := json.Marshal(task.Payload)
-	err := s.sendRequest(task.Type, body, task.Env, task.ID, "", task.Url)
-
-	return err
+	return s.sendRequest(task.Type, task.ResourceType, body, task.Env, task.ID, "", task.Url)
 }
 
-func (s *TaskService) sendRequest(task_type string, body []byte, env string, transactionId string, auth string, url string) string {
+func (s *TaskService) sendRequest(task_type string, resourceType string, body []byte, env string, transactionId string, auth string, url string) string {
 	var errstr string
+	if waitErr := utils.WaitForIldkiSlot(resourceType); waitErr != nil {
+		return fmt.Sprintf("rate limiter ke ILDKI penuh, task ditunda ke siklus retry berikutnya: %s", waitErr.Error())
+	}
+
 	req, err := http.NewRequest("POST", url, strings.NewReader(string(body)))
 	if err != nil {
 		return err.Error()
 	}
 
-	// Set Request Headers
 	req.Header.Add("Authorization", auth)
 	req.Header.Add("content-type", "application/json")
 
@@ -140,53 +196,29 @@ func (s *TaskService) sendRequest(task_type string, body []byte, env string, tra
 		req.Header.Add(s.Proxy.Config.FhirSource.Header, "backup-satusehat")
 	}
 
-	response, err := s.Proxy.httpClient(&env).Do(req)
+	response, err := s.Proxy.httpClientBackground(&env).Do(req)
 	if err != nil {
 		_, errstr = utils.HttpError("satusehat", req, nil, err)
 		return errstr
 	}
-
 	defer response.Body.Close()
 
 	bodyBytes, err := io.ReadAll(response.Body)
 	if err != nil {
 		return err.Error()
 	}
-	base := map[string]any{}
-	err1 := json.Unmarshal(bodyBytes, &base)
 
-	if err1 != nil {
-		return err1.Error()
+	base := map[string]any{}
+	if err := json.Unmarshal(bodyBytes, &base); err != nil {
+		return err.Error()
 	}
 
 	if response.StatusCode != fiber.StatusOK && response.StatusCode != fiber.StatusCreated {
 		_, msg := utils.HttpError("satusehat", req, response, nil)
-
 		return msg
 	}
 
 	return ""
-}
-
-// Credential
-func (s *TaskService) SyncCredential() {
-	// Get Active Token
-	logger.Info("Jalankan Job Untuk Sinkronisasi Credential")
-	tokens := s.Repository.GetToken()
-
-	logger.InfoJson("Tokens", tokens)
-	if _, ok := tokens["dev"]; ok {
-		token := tokens["dev"]
-
-		s.ProcessRetryTasks(&token)
-	}
-
-	if _, ok := tokens["prod"]; ok {
-		token := tokens["prod"]
-
-		s.ProcessRetryTasks(&token)
-	}
-
 }
 
 func ReplaceHostname(rawURL, newHost string) (string, error) {

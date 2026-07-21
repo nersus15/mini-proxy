@@ -12,3 +12,4 @@ public.pub
 dist/*
 .DS_Store
 docker-compose*.yml
+graphify-out

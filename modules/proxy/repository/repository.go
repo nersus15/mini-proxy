@@ -3,9 +3,11 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/nersus15/mini-proxy/mod-proxy/config"
 	"github.com/nersus15/mini-proxy/mod-proxy/entity"
+	"github.com/nersus15/mini-proxy/mod-proxy/helper/types"
 	"github.com/pressly/goose/v3"
 	"github.com/uptrace/bun"
 	"github.com/webcore-go/webcore/app/core"
@@ -17,16 +19,18 @@ type ProxyRepository struct {
 	Connection port.IDatabase
 	Context    *core.AppContext
 	Config     *config.ModuleConfig
+	Memory     port.ICacheMemory
 }
 
 type TransactiocPayload struct {
 }
 
-func NewProxyRepository(ctx *core.AppContext, cfg *config.ModuleConfig, conn port.IDatabase) *ProxyRepository {
+func NewProxyRepository(ctx *core.AppContext, cfg *config.ModuleConfig, conn port.IDatabase, mem port.ICacheMemory) *ProxyRepository {
 	return &ProxyRepository{
 		Connection: conn,
 		Context:    ctx,
 		Config:     cfg,
+		Memory:     mem,
 	}
 }
 
@@ -147,12 +151,14 @@ func (r *ProxyRepository) DeleteOldTransactions(status string, credOnly bool) (i
 	return r.Connection.Delete(r.Context.Context, entity.Transactions{}.TableName(), filter)
 }
 
-func (r *ProxyRepository) DeleteOldCredTransactions(token string) (int64, error) {
+func (r *ProxyRepository) DeleteOldCredTransactions(token string, clientId string) (int64, error) {
 	filter := []port.DbExpression{
 		{
-			Expr: "id != ?",
+			Expr: "id != ? AND resource_type = ? AND client = ?",
 			Args: []any{
 				token,
+				"credential",
+				clientId,
 			},
 		},
 	}
@@ -190,36 +196,77 @@ func (r *ProxyRepository) SaveClientCredentials(clientCredential *entity.ClinetC
 	return nil
 }
 
-func (r *ProxyRepository) GetToken() map[string]string {
-	tokens := map[string]string{}
-
-	var clientId string
+func (r *ProxyRepository) GetToken(token *string) []types.Token {
+	// tokens := map[string]string{}
+	tokens := make([]types.Token, 0)
+	var memkey string
 	var credential []entity.ClinetCredential
 
-	logger.Info(fmt.Sprintf("Ambil token dari client_id: %s", clientId))
-	// Find
+	logger.Info(fmt.Sprintf("Ambil token: %s", *token))
 	filter := []port.DbExpression{
-		{
-			Expr: "(client_id = ? OR client_id = ?)",
-			Args: []any{r.Config.SatSetDev.ClientID, r.Config.SatSetProd.ClientID},
-		},
+		// {
+		// 	Expr: "(client_id = ? OR client_id = ?)",
+		// 	Args: []any{r.Config.SatSetDev.ClientID, r.Config.SatSetProd.ClientID},
+		// },
+	}
+
+	if token != nil {
+		memkey = "token_" + *token
+		// Cek cache
+		ok := r.Memory.Get(memkey, &tokens)
+		if ok {
+			return tokens
+		}
+
+		filter = append(filter, port.DbExpression{
+			Expr: "access_token = ?",
+			Args: []any{token},
+		})
 	}
 	sort := map[string]int{"created_at": 1}
-
-	err := r.Connection.Find(r.Context.Context, &credential, entity.ClinetCredential{}.TableName(), []string{"*"}, filter, sort, 2, 0)
+	err := r.Connection.Find(r.Context.Context, &credential, entity.ClinetCredential{}.TableName(), []string{"env", "access_token", "client_id"}, filter, sort, 0, 0)
 
 	if err != nil {
 		logger.DebugJson("Gagal Ambil Token", err.Error())
 		return tokens
 	}
-
 	for _, cred := range credential {
-		if _, ok := tokens[cred.Env]; !ok {
-			tokens[cred.Env] = cred.AccessToken
-		}
+		tokens = append(tokens, types.Token{
+			AccessToken: cred.AccessToken,
+			ClientId:    cred.ClientID,
+			Env:         cred.Env,
+		})
+	}
+
+	// Cache token yang didapat dari GetToken - jika tujuannya untuk mendapatkan client_id
+	if token != nil {
+		r.Memory.Set(memkey, tokens, 6*time.Hour)
 	}
 
 	return tokens
+}
+func (r *ProxyRepository) GetPendingCredentialTransactions(limit int64) ([]entity.Transactions, error) {
+	conn := r.Connection.GetConnection()
+	bunDB, ok := conn.(*bun.DB)
+	if !ok {
+		return nil, fmt.Errorf("connection bukan *bun.DB")
+	}
+
+	var results []entity.Transactions
+	query := bunDB.NewSelect().
+		Model(&results).
+		ColumnExpr("tr.*").
+		Join("JOIN client_credentials AS cc ON cc.access_token = tr.id").
+		Where("tr.status IN (?)", bun.List([]string{"PENDING", "RETRY"})).
+		Where("tr.resource_type = ?", "credential").
+		OrderExpr("tr.created_at ASC")
+
+	if limit > 0 {
+		query = query.Limit(int(limit))
+	}
+
+	err := query.Scan(r.Context.Context)
+	return results, err
 }
 
 func (d *ProxyRepository) StartMigration(DB interface{}, dialect string, service string, command string, dir string, args []string) error {

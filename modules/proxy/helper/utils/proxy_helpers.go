@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/goccy/go-json"
 	"github.com/gofiber/fiber/v2"
@@ -194,6 +195,12 @@ func BundleTransactionDetail(resourceType string, body []byte) (string, string) 
 
 func ForwardRequestToIldkiBackground(cfg *config.ModuleConfig, client *http.Client, repo *repository.ProxyRepository, method string, urlValue string, env string, auth string, resourceType string, body []byte) {
 	logger.Info("===== Forward Request di Background =====", "Method", method, "Url", urlValue, "Env", env)
+	clientId := "0"
+	t := ""
+
+	if auth != "" {
+		t = strings.Replace(auth, "Bearer ", "", 1)
+	}
 
 	if resourceType == "" {
 		resourceType = "Bundle"
@@ -205,6 +212,14 @@ func ForwardRequestToIldkiBackground(cfg *config.ModuleConfig, client *http.Clie
 	}
 
 	req, err := http.NewRequest(method, urlValue, bytes.NewReader(body))
+
+	// Terpaksa Get Token dari database untuk dapat ClientID nya
+	tokens := repo.GetToken(&t)
+
+	if len(tokens) == 1 {
+		clientId = tokens[0].ClientId
+	}
+
 	if err != nil {
 		LogForwardError(urlValue, env, "gagal membuat request", err)
 		SaveErrorTransactionBackground(repo, types.TransactionError{
@@ -212,6 +227,7 @@ func ForwardRequestToIldkiBackground(cfg *config.ModuleConfig, client *http.Clie
 			Type:         "forward",
 			ResourceType: resourceType,
 			Env:          env,
+			Client:       clientId,
 			Url:          urlValue,
 			PatientId:    patientId,
 			Payload:      body,
@@ -234,6 +250,7 @@ func ForwardRequestToIldkiBackground(cfg *config.ModuleConfig, client *http.Clie
 				Type:         "forward",
 				ResourceType: resourceType,
 				Env:          env,
+				Client:       clientId,
 				Url:          urlValue,
 				PatientId:    patientId,
 				Payload:      body,
@@ -253,6 +270,7 @@ func ForwardRequestToIldkiBackground(cfg *config.ModuleConfig, client *http.Clie
 				Type:         "forward",
 				ResourceType: resourceType,
 				Env:          env,
+				Client:       clientId,
 				Url:          urlValue,
 				PatientId:    patientId,
 				Payload:      body,
@@ -284,6 +302,7 @@ func ForwardRequestToIldkiBackground(cfg *config.ModuleConfig, client *http.Clie
 			Type:         "forward",
 			ResourceType: resourceType,
 			Env:          env,
+			Client:       clientId,
 			Url:          urlValue,
 			PatientId:    patientId,
 			Payload:      body,

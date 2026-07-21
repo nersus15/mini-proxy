@@ -48,9 +48,9 @@ func GetUrl(cfg *config.ModuleConfig, env string, resourceType string, ctx *fibe
 
 func GetTarget(priority string) (string, string) {
 	target := "satusehat"
-	forward := "hapi"
+	forward := "ildki"
 	if priority == "local-first" {
-		target = "hapi"
+		target = "ildki"
 		forward = "satusehat"
 	}
 

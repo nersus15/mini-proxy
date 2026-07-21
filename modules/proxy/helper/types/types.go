@@ -13,6 +13,7 @@ type TransactionError struct {
 	ID           string    `json:"id"`
 	Type         string    `json:"type"`
 	Env          string    `json:"env"`
+	Client       string    `json:"client"`
 	Url          string    `json:"url"`
 	ResourceType string    `json:"resource_type"`
 	PatientId    string    `json:"patient_id"`
@@ -62,6 +63,7 @@ func (r *TransactionError) ToEntity() *entity.Transactions {
 		ID:           r.ID,
 		Type:         r.Type,
 		Env:          r.Env,
+		Client:       r.Client,
 		Url:          r.Url,
 		ResourceType: r.ResourceType,
 		PatientId:    r.PatientId,
@@ -379,4 +381,10 @@ type AxiosRequestConfig struct {
 	Method  string            `json:"method"`
 	Headers map[string]string `json:"headers"`
 	Data    interface{}       `json:"data,omitempty"` // Body yang dikirim saat request ke SATUSEHAT
+}
+
+type Token struct {
+	AccessToken string `bson:"access_token" json:"access_token"`
+	ClientId    string `bson:"client_id" json:"client_token"`
+	Env         string `bson:"env" json:"env"`
 }

@@ -77,7 +77,7 @@ func (m *Module) Init(ctx *core.AppContext) error {
 
 	db := lib.(port.IDatabase)
 
-	m.repository = repository.NewProxyRepository(ctx, m.config, db)
+	m.repository = repository.NewProxyRepository(ctx, m.config, db, m.memory)
 
 	// Jalankan migrasi otomatis hanya jika database driver menggunakan sqlite
 	if ctx.Config.Database.Driver == "sqlite" {
@@ -115,7 +115,7 @@ func (m *Module) Init(ctx *core.AppContext) error {
 		}
 
 		if _, err := m.cron.AddFunc(m.config.Cron.Schedule, func() {
-			m.taskService.ProcessRetryTasks(nil)
+			m.taskService.ProcessResourceRetryTasks()
 		}); err != nil {
 			logger.ErrorJson("Error Menambahkan Cronjob", err)
 		}

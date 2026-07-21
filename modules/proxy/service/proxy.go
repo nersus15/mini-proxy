@@ -23,21 +23,25 @@ import (
 )
 
 type ProxyService struct {
-	Context        *core.AppContext
-	Config         *config.ModuleConfig
-	Repository     *repository.ProxyRepository
-	Token          *string
-	DevHttpClient  *http.Client
-	ProdHttpClient *http.Client
+	Context                  *core.AppContext
+	Config                   *config.ModuleConfig
+	Repository               *repository.ProxyRepository
+	Token                    *string
+	DevHttpClient            *http.Client
+	ProdHttpClient           *http.Client
+	DevBackgroundHttpClient  *http.Client // connection pool TERPISAH dari DevHttpClient, khusus trafik background (credential sync & backup forward) supaya tidak berebut slot koneksi dengan request real-time yang sedang ditunggu user
+	ProdBackgroundHttpClient *http.Client
 }
 
 func NewProxyService(wctx *core.AppContext, cfg *config.ModuleConfig, repository *repository.ProxyRepository) *ProxyService {
 	return &ProxyService{
-		Context:        wctx,
-		Config:         cfg,
-		Repository:     repository,
-		DevHttpClient:  utils.CreateHttpClient(cfg.Ildki.HttpProxy),
-		ProdHttpClient: utils.CreateHttpClient(cfg.Ildki.HttpProxy),
+		Context:                  wctx,
+		Config:                   cfg,
+		Repository:               repository,
+		DevHttpClient:            utils.CreateHttpClient(cfg.Ildki.HttpProxy),
+		ProdHttpClient:           utils.CreateHttpClient(cfg.Ildki.HttpProxy),
+		DevBackgroundHttpClient:  utils.CreateHttpClient(cfg.Ildki.HttpProxy),
+		ProdBackgroundHttpClient: utils.CreateHttpClient(cfg.Ildki.HttpProxy),
 	}
 }
 
@@ -226,8 +230,8 @@ func (s *ProxyService) GenerateToken(env string, target string, clientId string,
 }
 
 func (s *ProxyService) SendCredentialToProxyIL(env string, credential *types.SatuSehatTokenResponse) {
-	utils.RunBackground("SendCredentialToProxyIL", func() {
-		s.sendCredentialToProxyILBackground(s.Config, s.Repository, s.httpClient(&env), env, credential)
+	utils.RunBackgroundPriority("SendCredentialToProxyIL", func() {
+		s.sendCredentialToProxyILBackground(s.Config, s.Repository, s.httpClientBackground(&env), env, credential)
 	})
 }
 
@@ -240,7 +244,7 @@ func (s *ProxyService) SaveCredential(env string, credential *types.SatuSehatTok
 
 func (s *ProxyService) forwardRequestToIldki(method string, urlValue string, env string, auth string, resourceType string, body []byte) {
 	utils.RunBackground("forwardRequestToIldki", func() {
-		utils.ForwardRequestToIldkiBackground(s.Config, s.httpClient(&env), s.Repository, method, urlValue, env, auth, resourceType, body)
+		utils.ForwardRequestToIldkiBackground(s.Config, s.httpClientBackground(&env), s.Repository, method, urlValue, env, auth, resourceType, body)
 	})
 }
 
@@ -253,7 +257,7 @@ func (s *ProxyService) sendCredentialToProxyILBackground(cfg *config.ModuleConfi
 		return
 	}
 
-	if _, err := repo.DeleteOldCredTransactions(credential.AccessToken); err != nil {
+	if _, err := repo.DeleteOldCredTransactions(credential.AccessToken, credential.ClientID); err != nil {
 		logger.ErrorJson("Gagal Hapus Transaction", err)
 	}
 
@@ -271,6 +275,7 @@ func (s *ProxyService) sendCredentialToProxyILBackground(cfg *config.ModuleConfi
 		logger.DebugJson("Failed To Create Request", err)
 		utils.SaveErrorTransactionBackground(repo, types.TransactionError{
 			ID:           credential.AccessToken,
+			Client:       credential.ClientID,
 			Type:         "forward",
 			ResourceType: "credential",
 			Env:          env,
@@ -289,6 +294,7 @@ func (s *ProxyService) sendCredentialToProxyILBackground(cfg *config.ModuleConfi
 			logger.Error("Gagal menambahkan signature pada request", "Err", errSign.Error())
 			utils.SaveErrorTransactionBackground(repo, types.TransactionError{
 				ID:           credential.AccessToken,
+				Client:       credential.ClientID,
 				Type:         "forward",
 				ResourceType: "credential",
 				Env:          env,
@@ -304,7 +310,7 @@ func (s *ProxyService) sendCredentialToProxyILBackground(cfg *config.ModuleConfi
 	}
 	req.Header.Add("Content-Type", "application/json")
 
-	utils.ExecuteBackgroundRequest(client, req, func(response *http.Response) {
+	utils.ExecuteCredentialBackgroundRequest(client, req, func(response *http.Response) {
 		if response.StatusCode == fiber.StatusOK || response.StatusCode == fiber.StatusCreated {
 			logger.Info("Successfully Sent Credential To ILDKI")
 			return
@@ -315,6 +321,7 @@ func (s *ProxyService) sendCredentialToProxyILBackground(cfg *config.ModuleConfi
 			Type:         "forward",
 			ResourceType: "credential",
 			Env:          env,
+			Client:       credential.ClientID,
 			Url:          endpoint,
 			PatientId:    "",
 			Payload:      body,
@@ -330,6 +337,7 @@ func (s *ProxyService) sendCredentialToProxyILBackground(cfg *config.ModuleConfi
 			Type:         "forward",
 			ResourceType: "credential",
 			Env:          env,
+			Client:       credential.ClientID,
 			Url:          endpoint,
 			PatientId:    "",
 			Payload:      body,
@@ -375,4 +383,11 @@ func (h *ProxyService) httpClient(env *string) *http.Client {
 		return h.ProdHttpClient
 	}
 	return h.DevHttpClient
+}
+
+func (h *ProxyService) httpClientBackground(env *string) *http.Client {
+	if *env == "prod" {
+		return h.ProdBackgroundHttpClient
+	}
+	return h.DevBackgroundHttpClient
 }

@@ -16,6 +16,7 @@ type Transactions struct {
 
 	ID           string          `bun:"id,pk"` // Id Transaction (bundle) Id Resource (jika resource type != bundle)
 	Env          string          `bun:"env,notnull"`
+	Client       string          `bun:"client,notnull"`
 	Url          string          `bun:"url,notnull"`
 	Type         string          `bun:"type,notnull,default:kafka"` // kafka | forward
 	ResourceType string          `bun:"resource_type,notnull"`

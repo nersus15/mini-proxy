@@ -31,8 +31,8 @@ type IldkiConfig struct {
 	Enabled        bool   `mapstructure:"enabled" json:"enabled"`
 	ProductionURL  string `mapstructure:"production_url" json:"production_url"`
 	DevelopmentURL string `mapstructure:"development_url" json:"development_url"`
-	DevAuthUrl     string `mapstructure:"dev_authurl" json:"dev_authurl"`
-	ProdAuthUrl    string `mapstructure:"prod_authurl" json:"prod_authurl"`
+	DevAuthUrl     string `mapstructure:"development_authurl" json:"development_authurl"`
+	ProdAuthUrl    string `mapstructure:"production_authurl" json:"production_authurl"`
 	BackupBaseUrl  string `mapstructure:"backup_baseurl" json:"backup_baseurl"`
 	ZeroTrust      bool   `mapstructure:"zero_trust" json:"zero_trust"`
 	HttpProxy      string `mapstructure:"http_proxy" json:"http_proxy"`
