@@ -85,9 +85,9 @@ func TestGetTarget(t *testing.T) {
 		wantTarget  string
 		wantForward string
 	}{
-		{"local first", "local-first", "hapi", "satusehat"},
-		{"satusehat first", "satusehat-first", "satusehat", "hapi"},
-		{"unknown priority defaults to satusehat", "unknown-priority", "satusehat", "hapi"},
+		{"local first", "local-first", "ildki", "satusehat"},
+		{"satusehat first", "satusehat-first", "satusehat", "ildki"},
+		{"unknown priority defaults to satusehat", "unknown-priority", "satusehat", "ildki"},
 	}
 
 	for _, tc := range cases {
