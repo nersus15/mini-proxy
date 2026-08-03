@@ -93,6 +93,9 @@ jobs:
         with:
           update: true
           msystem: MINGW64
+          # Inherit the Windows PATH so Go (installed by actions/setup-go)
+          # stays reachable inside the MSYS2 shell.
+          path-type: inherit
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-pkgconf
