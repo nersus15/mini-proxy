@@ -58,7 +58,7 @@ func (m *Module) Dependencies() []string {
 func (m *Module) Init(ctx *core.AppContext) error {
 	// Load configuration into ModuleConfig (bind to key)
 	m.config = &config.ModuleConfig{}
-	if err := core.LoadDefaultConfigModule("fhir", m.config); err != nil {
+	if err := appConfig.LoadDefaultConfigModule("fhir", m.config); err != nil {
 		return err
 	}
 
@@ -138,7 +138,7 @@ func (m *Module) Destroy() error {
 	return nil
 }
 
-func (m *Module) Config() appConfig.Configurable {
+func (m *Module) Config() appConfig.ConfigObject {
 	return m.config
 }
 

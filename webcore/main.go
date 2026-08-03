@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/nersus15/mini-proxy/proxy"
 	"github.com/webcore-go/webcore/app/core"
 	"github.com/webcore-go/webcore/app/out"
@@ -51,5 +53,6 @@ func main() {
 		log.Fatalf("Failed to start application: %v", err)
 	}
 
+	defer sentry.Flush(2 * time.Second)
 	fmt.Printf("Service '%s' started successfully\n", service)
 }
