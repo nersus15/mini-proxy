@@ -24,7 +24,7 @@ Mini Proxy adalah reverse proxy berbasis Go yang dirancang untuk memproses, memo
 | Linux arm64 | ✅ | ✅ | Supported |
 | macOS Apple Silicon | ✅ | ✅ | Supported |
 | macOS Intel | ❌ | ✅ | Docker Recommended |
-| Windows Native | ❌ | ✅ | Docker Recommended |
+| Windows amd64 | ✅ | ✅ | Supported |
 
 > **Note**
 >
@@ -44,13 +44,11 @@ mini-proxy/
 │   └── go.mod
 ├── modules/             # Additional modules
 │   └── proxy/
-├── config.yaml          # Configuration
+├── config.yaml.example  # Configuration template
 ├── Dockerfile           # Production Docker image
-├── Dockerfile.barebone  # Barebone Docker image
-├── docker-compose*.yml  # Docker Compose files
-├── Makefile            # Build targets
-├── scripts/            # Build and release scripts
-└── README.md           # This file
+├── docker-compose.yml   # Docker Compose file
+├── scripts/             # Build and release scripts
+└── README.md            # This file
 ```
 
 ---
@@ -97,7 +95,7 @@ Edit `config.yaml` sesuai kebutuhan.
 ### 5. Jalankan
 
 ```bash
-./webcore proxy
+./main proxy
 ```
 
 ---
@@ -106,20 +104,23 @@ Edit `config.yaml` sesuai kebutuhan.
 
 ### 1. Download
 
+Gunakan package **docker**, karena hanya package ini yang menyertakan
+`Dockerfile` dan `docker-compose.yml`.
+
 ```
-mini-proxy-v1.0.0-linux-amd64.tar.gz
+mini-proxy-v1.0.0-docker-amd64.tar.gz
 ```
 
 ### 2. Extract
 
 ```bash
-tar -xzf mini-proxy-v1.0.0-linux-amd64.tar.gz
+tar -xzf mini-proxy-v1.0.0-docker-amd64.tar.gz
 ```
 
 ### 3. Masuk ke Folder
 
 ```bash
-cd mini-proxy-v1.0.0-linux-amd64
+cd mini-proxy-v1.0.0-docker-amd64
 ```
 
 ### 4. Konfigurasi
@@ -199,19 +200,19 @@ Jika pertama kali dijalankan, macOS mungkin akan memblokir binary karena belum d
 Hilangkan atribut karantina:
 
 ```bash
-xattr -dr com.apple.quarantine ./webcore
+xattr -dr com.apple.quarantine ./main
 ```
 
 Berikan izin eksekusi apabila diperlukan:
 
 ```bash
-chmod +x ./webcore
+chmod +x ./main
 ```
 
 Kemudian jalankan:
 
 ```bash
-./webcore proxy
+./main proxy
 ```
 
 ---
@@ -220,20 +221,23 @@ Kemudian jalankan:
 
 ### 1. Download
 
+Gunakan package **docker**. Package ini berisi binary linux, karena Docker
+memang menjalankan container linux.
+
 ```
-mini-proxy-v1.0.0-darwin-arm64.tar.gz
+mini-proxy-v1.0.0-docker-amd64.tar.gz
 ```
 
 ### 2. Extract
 
 ```bash
-tar -xzf mini-proxy-v1.0.0-darwin-arm64.tar.gz
+tar -xzf mini-proxy-v1.0.0-docker-amd64.tar.gz
 ```
 
 ### 3. Masuk ke Folder
 
 ```bash
-cd mini-proxy-v1.0.0-darwin-arm64
+cd mini-proxy-v1.0.0-docker-amd64
 ```
 
 ### 4. Konfigurasi
@@ -269,11 +273,7 @@ docker compose down
 ```
 ---
 
-## Windows (Docker)
-
-> **Windows Native Binary belum didukung.**
->
-> Pengguna Windows disarankan menggunakan Docker Desktop.
+## Windows (Native)
 
 ### 1. Download
 
@@ -293,15 +293,45 @@ mini-proxy-v1.0.0-windows-amd64
 
 ### 4. Konfigurasi
 
-Salyml` ```
+Edit `config.yaml` sesuai kebutuhan.
 
-menjadi
+### 5. Jalankan
+
+Buka PowerShell atau Windows Terminal pada folder tersebut.
+
+```powershell
+.\main.exe proxy
+```
+
+Cara ini mengharuskan jendela terminal tetap terbuka. Untuk menjalankan di
+latar belakang, lihat bagian [Menjalankan sebagai Service](#menjalankan-sebagai-service-windows).
+
+---
+
+## Windows (Docker)
+
+### 1. Download
+
+Gunakan package **docker**, bukan package windows, karena hanya package ini
+yang menyertakan `Dockerfile` dan `docker-compose.yml`.
 
 ```
-config.yaml
+mini-proxy-v1.0.0-docker-amd64.tar.gz
 ```
 
-Lalu sesuaikan konfigurasi.
+### 2. Extract
+
+Extract menggunakan Windows Explorer, 7-Zip, atau WinRAR.
+
+### 3. Masuk ke Folder
+
+```
+mini-proxy-v1.0.0-docker-amd64
+```
+
+### 4. Konfigurasi
+
+Edit `config.yaml` sesuai kebutuhan.
 
 ### 5. Jalankan
 
@@ -331,45 +361,66 @@ docker compose down
 
 ---
 
-# Windows Users
+# Menjalankan sebagai Service (Windows)
 
-## Current Status
+Menjalankan `main.exe` langsung dari terminal mengharuskan jendela terminal
+tetap terbuka. Untuk menjalankannya di latar belakang, gunakan **NSSM**.
 
-Windows native build masih **belum didukung**.
+## NSSM
 
-Mini Proxy menggunakan beberapa dependency native seperti:
+NSSM membungkus `main.exe` menjadi Windows Service, sehingga otomatis jalan
+saat boot, restart sendiri kalau crash, dan tidak butuh terminal terbuka.
 
-- SQLCipher
-- librdkafka (Confluent Kafka)
+Unduh NSSM dari [nssm.cc](https://nssm.cc), lalu:
 
-yang saat ini masih mengalami kendala kompatibilitas saat proses linking menggunakan toolchain Windows.
-
-Akibatnya:
-
-- Native binary Windows belum tersedia.
-- Build GitHub Actions untuk Windows masih dalam tahap pengembangan.
-
-## Recommendation
-
-Gunakan Docker untuk menjalankan Mini Proxy pada Windows.
-
-```bash
-docker compose up -d
+```powershell
+nssm install mini-proxy "C:\mini-proxy\main.exe" proxy
+nssm set mini-proxy AppDirectory C:\mini-proxy
+nssm set mini-proxy AppStdout C:\mini-proxy\logs\out.log
+nssm set mini-proxy AppStderr C:\mini-proxy\logs\err.log
+nssm start mini-proxy
 ```
 
-Docker menyediakan lingkungan runtime Linux yang telah memiliki seluruh dependency native sehingga lebih stabil dibandingkan menjalankan binary Windows secara langsung.
+Karena `logging.output` pada `config.yaml` bernilai `stdout`, `AppStdout` dan
+`AppStderr` perlu diisi supaya log tetap tersimpan.
+
+Mengelola service:
+
+```powershell
+nssm restart mini-proxy
+nssm stop mini-proxy
+nssm remove mini-proxy confirm
+```
+
+Overhead NSSM kecil: satu proses wrapper beberapa MB dan praktis 0% CPU saat idle.
+
+> `sc.exe create` bawaan Windows tidak bisa dipakai langsung, karena binary Go
+> tidak mengimplementasikan Service Control Handler sehingga gagal dengan
+> error 1053.
+
+## Alternatif: Task Scheduler
+
+Kalau tidak ingin menambah tool, Task Scheduler bisa dipakai. Tidak ada proses
+wrapper sama sekali, tapi kontrol service dan rotasi log harus diurus sendiri.
+
+```powershell
+schtasks /create /tn "mini-proxy" /tr "cmd /c C:\mini-proxy\main.exe proxy >> C:\mini-proxy\logs\out.log 2>&1" /sc onstart /ru SYSTEM /rl HIGHEST
+```
 
 ---
 
 # Releases
 
-Setiap release pada halaman **GitHub Releases** berisi:
+Setiap release pada halaman **GitHub Releases** berisi dua jenis package:
 
-- Native Binary (platform yang didukung)
-- Docker Compose Files
-- Configuration Template
-- Build Metadata (`build.json`)
-- SHA256SUMS
+| Package | Isi |
+|---------|-----|
+| `mini-proxy-{version}-{os}-{arch}` | Binary native, `config.yaml`, migrations, `build.json` |
+| `mini-proxy-{version}-docker-{arch}` | Binary linux + `Dockerfile` + `docker-compose.yml` |
+
+Beserta `SHA256SUMS` untuk verifikasi.
+
+> `Dockerfile` dan `docker-compose.yml` hanya ada pada package **docker**.
 
 ---
 

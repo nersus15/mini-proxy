@@ -13,22 +13,22 @@ Build system untuk **mini-proxy** yang mendukung build lokal, packaging, checksu
 ### Linux
 
 - gcc
-- librdkafka-dev
 - libsqlcipher-dev
 
 ### macOS
 
 - Xcode Command Line Tools
 - clang
-- librdkafka
 - sqlcipher
 
 ### Windows
 
-- MSYS2
+- MSYS2 (MINGW64)
 - MinGW GCC
-- librdkafka
 - SQLCipher
+
+> `librdkafka` sudah tidak dibutuhkan lagi sejak dependency kafka
+> (`lib-kafka` / `confluent-kafka-go`) dinonaktifkan.
 
 ---
 
@@ -148,7 +148,7 @@ Melakukan proses release lengkap.
 
 Tahapan yang dijalankan:
 
-1. Doctor
+1. Environment Check
 2. Workspace Sync
 3. Build
 4. Package
@@ -240,6 +240,7 @@ Release otomatis membuat checksum.
 dist/
 ├── mini-proxy-v1.0.0-linux-amd64.tar.gz
 ├── mini-proxy-v1.0.0-windows-amd64.zip
+├── mini-proxy-v1.0.0-docker-amd64.tar.gz
 └── SHA256SUMS
 ```
 
@@ -277,34 +278,6 @@ Selanjutnya GitHub Actions akan:
 - Menggabungkan semua artifact
 - Membuat GitHub Release
 - Mengunggah seluruh package release
-
----
-
-# Makefile
-
-Build host
-
-```bash
-make build
-```
-
-Build semua platform
-
-```bash
-make build-all
-```
-
-Release host
-
-```bash
-make release
-```
-
-Release semua platform
-
-```bash
-make release-all
-```
 
 ---
 
@@ -384,50 +357,89 @@ Verify Checksum (release.sh only)
 - Folder sementara di `build/` akan dihapus setelah package berhasil dibuat.
 - Nama file binary bisa ditentukan pada `build.conf`
 
+---
 
-# Known Issues
+# Windows
 
-## Windows
+> **Status:** Supported
 
-> **Status:** Experimental
+Build native Windows sudah didukung. Sebelumnya build Windows gagal karena
+`librdkafka` (dari `confluent-kafka-go`) tidak bisa di-link dengan toolchain
+MinGW. Dependency kafka sudah dinonaktifkan, sehingga yang tersisa hanya
+SQLCipher yang memang sudah punya dukungan Windows.
 
-Saat ini build native Windows **belum diverifikasi ulang**, meski salah satu penyebab utamanya sudah hilang.
+Job Windows di GitHub Actions berjalan pada `windows-latest` dengan MSYS2
+(MINGW64) dan `shell: msys2` beserta `path-type: inherit`, supaya Go dari
+`actions/setup-go` tetap terbaca di dalam shell MSYS2.
 
-Sebelumnya ada dua dependency native yang bermasalah di toolchain Windows (MinGW/MSYS2 maupun MSVC):
+## Menjalankan di Background
 
-- ~~librdkafka (confluent-kafka-go)~~ — **sudah tidak dipakai lagi.** `github.com/webcore-go/lib-kafka` dan `github.com/confluentinc/confluent-kafka-go/v2` sudah dinonaktifkan dari `webcore/go.mod` dan `webcore/proxy/libraries.go`. Ini adalah dependency yang paling sering gagal link di Windows, jadi blocker utamanya sudah hilang.
-- SQLCipher (`github.com/mutecomm/go-sqlcipher` via `lib-sqlchiper`) — **masih dipakai aktif** (CGO, `database:sqlite` loader). Library ini sudah punya implementasi khusus Windows (`sqlite3_windows.go`) dan workflow CI sudah menyiapkan MSYS2 + `mingw-w64-x86_64-sqlcipher`, jadi kemungkinan build Windows sekarang bisa berhasil — tapi belum ada run yang berhasil untuk memastikan.
+Package Windows berisi `main.exe`. Perintah menjalankannya:
 
-Status saat ini:
+```
+main.exe proxy
+```
 
-- ✅ Blocker librdkafka sudah teratasi (dependency dihapus).
-- ⚠️ Blocker SQLCipher kemungkinan besar juga sudah aman (dukungan Windows sudah ada di library & CI), tapi belum ada histori run yang berhasil.
-- 🔄 Job Windows di GitHub Actions **sudah diaktifkan kembali** (matrix `windows-latest` di `release.yml`) untuk verifikasi — status akan diketahui pada run berikutnya (`workflow_dispatch` atau push tag `v*`).
+Kalau dijalankan langsung, jendela Command Prompt harus tetap terbuka.
+Untuk menjalankan di latar belakang, gunakan **NSSM**.
 
-### Rekomendasi
+### NSSM (rekomendasi)
 
-Untuk pengguna Windows, jalankan Mini Proxy menggunakan **Docker**.
+NSSM membungkus `main.exe` menjadi Windows Service, sehingga otomatis jalan
+saat boot, restart sendiri kalau crash, dan tidak butuh Command Prompt terbuka.
 
-Unduh package **docker** (`mini-proxy-{version}-docker-amd64.tar.gz`) — bukan package
-windows — karena `Dockerfile` dan `docker-compose.yml` hanya disertakan di sana.
+```
+nssm install mini-proxy "C:\mini-proxy\main.exe" proxy
+nssm set mini-proxy AppDirectory C:\mini-proxy
+nssm set mini-proxy AppStdout C:\mini-proxy\logs\out.log
+nssm set mini-proxy AppStderr C:\mini-proxy\logs\err.log
+nssm start mini-proxy
+```
+
+Perintah lain:
+
+```
+nssm restart mini-proxy
+nssm stop mini-proxy
+nssm remove mini-proxy confirm
+```
+
+Karena `logging.output` pada `config.yaml` bernilai `stdout`, `AppStdout` dan
+`AppStderr` perlu diisi supaya log tetap tersimpan.
+
+Overhead NSSM kecil: satu proses wrapper beberapa MB dan praktis 0% CPU saat
+idle.
+
+> `sc.exe create` bawaan Windows tidak bisa dipakai langsung karena binary Go
+> tidak mengimplementasikan Service Control Handler (error 1053), jadi tetap
+> perlu wrapper seperti NSSM.
+
+### Alternatif tanpa install tool
+
+Task Scheduler bisa dipakai kalau tidak mau menambah tool. Tidak ada proses
+wrapper sama sekali, tapi kontrol service dan log rotation harus diurus sendiri.
+
+```
+schtasks /create /tn "mini-proxy" /tr "cmd /c C:\mini-proxy\main.exe proxy >> C:\mini-proxy\logs\out.log 2>&1" /sc onstart /ru SYSTEM /rl HIGHEST
+```
+
+---
+
+# Docker
+
+Gunakan package **docker** (`mini-proxy-{version}-docker-{arch}.tar.gz`), karena
+`Dockerfile` dan `docker-compose.yml` hanya disertakan di sana.
 
 ```bash
 docker compose up -d
 ```
 
-atau
+---
 
-```bash
-docker compose -f docker-compose.yml up -d
-```
-
-Docker menggunakan image Linux sehingga seluruh dependency native telah tersedia dan lebih stabil dibandingkan menjalankan binary Windows secara langsung.
-
-### Status Platform
+# Status Platform
 
 | Platform | Binary | Docker | Status |
 |----------|:------:|:------:|:------:|
 | Linux | ✅ | ✅ | Supported |
 | macOS (Apple Silicon) | ✅ | ✅ | Supported |
-| Windows Native | ⚠️ | - | Unverified (librdkafka blocker gone, SQLCipher belum dites ulang) |
-| Windows (Docker) | ✅ | ✅ | Recommended |
+| Windows | ✅ | ✅ | Supported |
