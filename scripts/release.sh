@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-source "$SCRIPT_DIR/common.sh"
+source "$SCRIPT_DIR/lib.sh"
 
 VERSION="${1:-}"
 
@@ -40,18 +40,13 @@ banner
 info "Starting Release ${VERSION}"
 
 ###############################################################################
-# Environment
-###############################################################################
-
-bash "$SCRIPT_DIR/doctor.sh"
-
-###############################################################################
-# Build
+# Build (includes environment check, workspace sync, package, checksum)
 ###############################################################################
 
 bash "$SCRIPT_DIR/build.sh" "$VERSION"
 
 verify_checksum
+
 ###############################################################################
 # Release Notes
 ###############################################################################

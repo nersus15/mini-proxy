@@ -36,13 +36,10 @@ Build system untuk **mini-proxy** yang mendukung build lokal, packaging, checksu
 
 ```
 scripts/
-├── build.sh
-├── release.sh
-├── doctor.sh
-├── package.sh
-├── common.sh
-├── platform.sh
-└── build.conf
+├── build.sh      # Entry point: env check, workspace sync, build, package, checksum
+├── release.sh    # build.sh + verify checksum + changelog + gh release
+├── lib.sh        # Shared logic (logger, metadata, platform/compiler, packaging, checksum)
+└── build.conf    # Configuration (app name, platforms, output name)
 ```
 ---
 
@@ -68,13 +65,9 @@ mini-proxy-{os}-{arch}/
 
 ---
 
-# doctor.sh
+# Environment Check
 
-Memeriksa apakah environment build sudah siap.
-
-```bash
-./scripts/doctor.sh
-```
+`build.sh` dan `release.sh` otomatis memeriksa apakah environment build sudah siap (bagian dari `lib.sh`, fungsi `check_environment`) sebelum mulai build — tidak perlu dijalankan terpisah lagi.
 
 Contoh output:
 
@@ -353,7 +346,7 @@ rm -rf build dist
 # Build Flow
 
 ```
-doctor.sh
+check_environment
       │
       ▼
 go work sync
@@ -362,13 +355,13 @@ go work sync
 go build
       │
       ▼
-package.sh
+package_all
       │
       ▼
 SHA256SUMS
       │
       ▼
-Verify Checksum
+Verify Checksum (release.sh only)
 ```
 
 ---
@@ -389,17 +382,18 @@ Verify Checksum
 
 > **Status:** Experimental
 
-Saat ini build native Windows **belum didukung secara penuh**.
+Saat ini build native Windows **belum diverifikasi ulang**, meski salah satu penyebab utamanya sudah hilang.
 
-Hal ini disebabkan oleh dependency native berikut:
+Sebelumnya ada dua dependency native yang bermasalah di toolchain Windows (MinGW/MSYS2 maupun MSVC):
 
-- SQLCipher
-- librdkafka (confluent-kafka-go)
+- ~~librdkafka (confluent-kafka-go)~~ — **sudah tidak dipakai lagi.** `github.com/webcore-go/lib-kafka` dan `github.com/confluentinc/confluent-kafka-go/v2` sudah dinonaktifkan dari `webcore/go.mod` dan `webcore/proxy/libraries.go`. Ini adalah dependency yang paling sering gagal link di Windows, jadi blocker utamanya sudah hilang.
+- SQLCipher (`github.com/mutecomm/go-sqlcipher` via `lib-sqlchiper`) — **masih dipakai aktif** (CGO, `database:sqlite` loader). Library ini sudah punya implementasi khusus Windows (`sqlite3_windows.go`) dan workflow CI sudah menyiapkan MSYS2 + `mingw-w64-x86_64-sqlcipher`, jadi kemungkinan build Windows sekarang bisa berhasil — tapi job Windows di `.github/workflows/release.yml` masih di-nonaktifkan (comment) dan belum ada percobaan build ulang untuk memastikan.
 
-Kedua library tersebut masih mengalami kendala kompatibilitas pada proses linking menggunakan toolchain Windows (MinGW/MSYS2 maupun MSVC) sehingga:
+Status saat ini:
 
-- ❌ Build GitHub Actions untuk Windows belum berhasil.
-- ❌ Build native Windows menggunakan `build.sh` atau `release.sh` belum dapat menghasilkan binary yang stabil.
+- ✅ Blocker librdkafka sudah teratasi (dependency dihapus).
+- ⚠️ Blocker SQLCipher kemungkinan besar juga sudah aman (dukungan Windows sudah ada di library & CI), tapi belum ada histori run yang berhasil.
+- 🔄 Job Windows di GitHub Actions **sudah diaktifkan kembali** (matrix `windows-latest` di `release.yml`) untuk verifikasi — status akan diketahui pada run berikutnya (`workflow_dispatch` atau push tag `v*`).
 
 ### Rekomendasi
 
@@ -423,5 +417,5 @@ Docker menggunakan image Linux sehingga seluruh dependency native telah tersedia
 |----------|:------:|:------:|:------:|
 | Linux | ✅ | ✅ | Supported |
 | macOS (Apple Silicon) | ✅ | ✅ | Supported |
-| Windows Native | ❌ | - | Experimental |
+| Windows Native | ⚠️ | - | Unverified (librdkafka blocker gone, SQLCipher belum dites ulang) |
 | Windows (Docker) | ✅ | ✅ | Recommended |
