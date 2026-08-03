@@ -1,18 +1,6 @@
 # Mini Proxy
 
-Mini Proxy adalah reverse proxy berbasis Go yang dirancang untuk memproses, memodifikasi, dan meneruskan request HTTP dengan dukungan berbagai backend dan integrasi.
-
-## Features
-
-- High Performance HTTP Proxy
-- Fiber Framework
-- SQLCipher Support
-- Kafka Integration
-- Docker Ready
-- Multi-platform Build System
-- GitHub Actions CI/CD
-- Build Metadata
-- SHA256 Checksum Verification
+Mini Proxy adalah reverse proxy berbasis Go yang dirancang untuk memproses, memodifikasi, dan meneruskan request HTTP dari SIMFASKES ke Satusehat.
 
 ---
 
