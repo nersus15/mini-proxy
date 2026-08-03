@@ -13,17 +13,13 @@ if [[ -z "$VERSION" ]]; then
 fi
 
 while [[ $# -gt 0 ]]; do
-
     case "$1" in
-
         --all)
-
             BUILD_ALL=1
             shift
             ;;
 
         *)
-
             VERSION="$1"
             shift
             ;;
@@ -39,17 +35,9 @@ banner
 
 info "Starting Release ${VERSION}"
 
-###############################################################################
-# Build (includes environment check, workspace sync, package, checksum)
-###############################################################################
-
 bash "$SCRIPT_DIR/build.sh" "$VERSION"
 
 verify_checksum
-
-###############################################################################
-# Release Notes
-###############################################################################
 
 CHANGELOG="$DIST_DIR/CHANGELOG.md"
 
@@ -65,10 +53,6 @@ Branch       : ${BRANCH}
 Go           : ${GO_VERSION}
 
 EOF
-
-###############################################################################
-# GitHub CLI
-###############################################################################
 
 if command -v gh >/dev/null 2>&1; then
 
