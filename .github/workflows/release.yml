@@ -110,6 +110,7 @@ jobs:
         shell: pwsh
         run: |
           "C:\msys64\mingw64\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          "C:\msys64\usr\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
           "CC=gcc" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           "CXX=g++" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
