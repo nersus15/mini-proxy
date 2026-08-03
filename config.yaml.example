@@ -15,6 +15,14 @@ app:
     level: debug
     format: "${time} | ${status} | ${latency} | ${ip} | ${method} | ${path} | ${error}\n"
     output: stdout
+    # remote:
+    #   driver: "sentry"
+    #   uri: ""
+    #   sample_rate: 1.0
+    #   structured: true
+    #   default_tags:
+    #     service: "mini-proxy-test"
+    #   default_context: {}
 
   # Security settings
   security_headers: true
