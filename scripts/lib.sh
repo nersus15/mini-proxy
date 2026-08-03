@@ -587,27 +587,16 @@ build_all() {
 }
 
 ###############################################################################
-# Package One
+# Stage Release
 ###############################################################################
 
-package_one() {
+stage_release() {
 
-    local PLATFORM="$1"
-
-    local OS="${PLATFORM%%-*}"
-    local ARCH="${PLATFORM#*-}"
-
-    local BIN
-    BIN=$(binary_name "$OS")
-
-    local BUILD_PATH="$BUILD_DIR/$PLATFORM/$BIN"
-
-    [[ ! -f "$BUILD_PATH" ]] && return
-
-    info "Packaging ${PLATFORM}"
-
-    local RELEASE_DIR
-    RELEASE_DIR="$DIST_DIR/${RELEASE_PREFIX}-${VERSION}-${OS}-${ARCH}"
+    local RELEASE_DIR="$1"
+    local BUILD_PATH="$2"
+    local BIN="$3"
+    local OS="$4"
+    local ARCH="$5"
 
     rm -rf "$RELEASE_DIR"
 
@@ -628,12 +617,6 @@ package_one() {
     cp "$ROOT_DIR/config.yaml.example" \
         "$RELEASE_DIR/config.yaml"
 
-    cp "$ROOT_DIR/docker-compose.yml" \
-        "$RELEASE_DIR/docker-compose.yml"
-
-    cp "$ROOT_DIR/Dockerfile" \
-        "$RELEASE_DIR/Dockerfile"
-
     ###########################################################################
     # Migration
     ###########################################################################
@@ -650,35 +633,104 @@ package_one() {
 
     create_manifest "$RELEASE_DIR" "$OS" "$ARCH"
 
-    ###########################################################################
-    # Archive
-    ###########################################################################
+}
+
+###############################################################################
+# Archive Release
+###############################################################################
+
+archive_release() {
+
+    local NAME="$1"
+    local OS="$2"
 
     pushd "$DIST_DIR" >/dev/null
 
     if [[ "$OS" == "windows" ]]; then
 
-        zip -qr \
-            "${RELEASE_PREFIX}-${VERSION}-${OS}-${ARCH}.zip" \
-            "$(basename "$RELEASE_DIR")"
+        zip -qr "${NAME}.zip" "$NAME"
 
-        ARCHIVE="${RELEASE_PREFIX}-${VERSION}-${OS}-${ARCH}.zip"
+        ARCHIVE="${NAME}.zip"
 
     else
 
-        tar -czf \
-            "${RELEASE_PREFIX}-${VERSION}-${OS}-${ARCH}.tar.gz" \
-            "$(basename "$RELEASE_DIR")"
+        tar -czf "${NAME}.tar.gz" "$NAME"
 
-        ARCHIVE="${RELEASE_PREFIX}-${VERSION}-${OS}-${ARCH}.tar.gz"
+        ARCHIVE="${NAME}.tar.gz"
 
     fi
 
     popd >/dev/null
 
-    rm -rf "$RELEASE_DIR"
+    rm -rf "$DIST_DIR/$NAME"
+
+}
+
+###############################################################################
+# Package One
+###############################################################################
+
+package_one() {
+
+    local PLATFORM="$1"
+
+    local OS="${PLATFORM%%-*}"
+    local ARCH="${PLATFORM#*-}"
+
+    local BIN
+    BIN=$(binary_name "$OS")
+
+    local BUILD_PATH="$BUILD_DIR/$PLATFORM/$BIN"
+
+    [[ ! -f "$BUILD_PATH" ]] && return
+
+    info "Packaging ${PLATFORM}"
+
+    local NAME="${RELEASE_PREFIX}-${VERSION}-${OS}-${ARCH}"
+
+    stage_release "$DIST_DIR/$NAME" "$BUILD_PATH" "$BIN" "$OS" "$ARCH"
+
+    archive_release "$NAME" "$OS"
 
     success "${PLATFORM} packaged -> ${ARCHIVE}"
+}
+
+###############################################################################
+# Package Docker
+###############################################################################
+
+package_docker() {
+
+    local ARCH="$1"
+
+    local BIN
+    BIN=$(binary_name linux)
+
+    local BUILD_PATH="$BUILD_DIR/linux-${ARCH}/$BIN"
+
+    [[ ! -f "$BUILD_PATH" ]] && return
+
+    info "Packaging docker-${ARCH}"
+
+    local NAME="${RELEASE_PREFIX}-${VERSION}-docker-${ARCH}"
+
+    local RELEASE_DIR="$DIST_DIR/$NAME"
+
+    stage_release "$RELEASE_DIR" "$BUILD_PATH" "$BIN" linux "$ARCH"
+
+    ###########################################################################
+    # Docker
+    ###########################################################################
+
+    cp "$ROOT_DIR/docker-compose.yml" \
+        "$RELEASE_DIR/docker-compose.yml"
+
+    cp "$ROOT_DIR/Dockerfile" \
+        "$RELEASE_DIR/Dockerfile"
+
+    archive_release "$NAME" linux
+
+    success "docker-${ARCH} packaged -> ${ARCHIVE}"
 }
 
 ###############################################################################
@@ -689,11 +741,31 @@ package_all() {
 
     info "Packaging Release"
 
+    local dir name
+
+    ###########################################################################
+    # Native
+    ###########################################################################
+
     for dir in "$BUILD_DIR"/*; do
 
         [[ ! -d "$dir" ]] && continue
 
         package_one "$(basename "$dir")"
+
+    done
+
+    ###########################################################################
+    # Docker
+    ###########################################################################
+
+    for dir in "$BUILD_DIR"/linux-*; do
+
+        [[ ! -d "$dir" ]] && continue
+
+        name="$(basename "$dir")"
+
+        package_docker "${name#linux-}"
 
     done
 

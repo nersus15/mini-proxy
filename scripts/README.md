@@ -45,22 +45,42 @@ scripts/
 
 ## File Structure di Release
 
+Ada dua jenis paket: **native** (jalankan binary langsung) dan **docker**.
+
+### Native — `mini-proxy-{version}-{os}-{arch}`
+
 ```
-mini-proxy-{os}-{arch}/
+mini-proxy-{version}-{os}-{arch}/
 ├── db/                   # Folder yang disiapkan untuk tempat database sqlite (opsional)
+├── main                  # File binary (main.exe di Windows)
+├── config.yaml           # File config bawaan (dari config.yaml.example)
+├── build.json            # Build metadata
+└── webcore/              # File migrations
+```
+
+### Docker — `mini-proxy-{version}-docker-{arch}`
+
+Berisi binary **linux** ditambah file Docker.
+
+```
+mini-proxy-{version}-docker-{arch}/
+├── db/                   # Folder yang disiapkan untuk tempat database sqlite (opsional)
+├── main                  # File binary linux
+├── config.yaml           # File config bawaan (dari config.yaml.example)
+├── build.json            # Build metadata
 ├── Dockerfile            # Untuk build Docker image
 ├── docker-compose.yml    # Untuk run dengan Docker Compose
-├── webcore               # File binnary
-├── config.yaml           # File config bawaan
 └── webcore/              # File migrations
-
 ```
 
 ## Notes
 
 - Binary sudah pre-built, user tidak perlu build ulang
+- `config.yaml.example` dari root project di-*rename* menjadi `config.yaml` saat packaging, sehingga package siap pakai
 - Edit file `config.yaml` sebelum jalankan
 - Semua platform didukung: Linux, macOS, Windows
+- Paket native **tidak** menyertakan `Dockerfile`/`docker-compose.yml` — gunakan paket docker untuk itu
+- Paket docker dibuat otomatis dari setiap hasil build linux
 - Archive dalam format tar.gz untuk cross-platform compatibility
 
 ---
@@ -168,6 +188,8 @@ mini-proxy-v1.0.0-linux-amd64.tar.gz
 mini-proxy-v1.0.0-linux-arm64.tar.gz
 mini-proxy-v1.0.0-darwin-arm64.tar.gz
 mini-proxy-v1.0.0-windows-amd64.zip
+mini-proxy-v1.0.0-docker-amd64.tar.gz
+mini-proxy-v1.0.0-docker-arm64.tar.gz
 SHA256SUMS
 ```
 
@@ -175,10 +197,11 @@ SHA256SUMS
 
 # Package Format
 
-Linux/macOS
+Linux/macOS/Docker
 
 ```
 mini-proxy-v1.0.0-linux-amd64.tar.gz
+mini-proxy-v1.0.0-docker-amd64.tar.gz
 ```
 
 Windows
@@ -187,22 +210,8 @@ Windows
 mini-proxy-v1.0.0-windows-amd64.zip
 ```
 
-Setiap package berisi:
-
-```
-mini-proxy/
-├── mini-proxy
-├── config.yaml.example
-├── build.json
-├── LICENSE
-└── README.md
-```
-
-Windows:
-
-```
-mini-proxy.exe
-```
+Isi masing-masing package dijelaskan pada bagian
+[File Structure di Release](#file-structure-di-release).
 
 ---
 
@@ -387,7 +396,7 @@ Saat ini build native Windows **belum diverifikasi ulang**, meski salah satu pen
 Sebelumnya ada dua dependency native yang bermasalah di toolchain Windows (MinGW/MSYS2 maupun MSVC):
 
 - ~~librdkafka (confluent-kafka-go)~~ — **sudah tidak dipakai lagi.** `github.com/webcore-go/lib-kafka` dan `github.com/confluentinc/confluent-kafka-go/v2` sudah dinonaktifkan dari `webcore/go.mod` dan `webcore/proxy/libraries.go`. Ini adalah dependency yang paling sering gagal link di Windows, jadi blocker utamanya sudah hilang.
-- SQLCipher (`github.com/mutecomm/go-sqlcipher` via `lib-sqlchiper`) — **masih dipakai aktif** (CGO, `database:sqlite` loader). Library ini sudah punya implementasi khusus Windows (`sqlite3_windows.go`) dan workflow CI sudah menyiapkan MSYS2 + `mingw-w64-x86_64-sqlcipher`, jadi kemungkinan build Windows sekarang bisa berhasil — tapi job Windows di `.github/workflows/release.yml` masih di-nonaktifkan (comment) dan belum ada percobaan build ulang untuk memastikan.
+- SQLCipher (`github.com/mutecomm/go-sqlcipher` via `lib-sqlchiper`) — **masih dipakai aktif** (CGO, `database:sqlite` loader). Library ini sudah punya implementasi khusus Windows (`sqlite3_windows.go`) dan workflow CI sudah menyiapkan MSYS2 + `mingw-w64-x86_64-sqlcipher`, jadi kemungkinan build Windows sekarang bisa berhasil — tapi belum ada run yang berhasil untuk memastikan.
 
 Status saat ini:
 
@@ -398,6 +407,9 @@ Status saat ini:
 ### Rekomendasi
 
 Untuk pengguna Windows, jalankan Mini Proxy menggunakan **Docker**.
+
+Unduh package **docker** (`mini-proxy-{version}-docker-amd64.tar.gz`) — bukan package
+windows — karena `Dockerfile` dan `docker-compose.yml` hanya disertakan di sana.
 
 ```bash
 docker compose up -d
