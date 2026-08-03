@@ -93,6 +93,7 @@ jobs:
         with:
           update: true
           msystem: MINGW64
+          path-type: inherit
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-pkgconf
@@ -100,29 +101,7 @@ jobs:
             mingw-w64-x86_64-sqlcipher
             mingw-w64-x86_64-openssl
             zip
-
-      ##############################################################################
-      # Configure Windows Environment
-      ##############################################################################
-
-      - name: Configure Windows Environment
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          "C:\msys64\mingw64\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
-
-          "CC=gcc" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          "CXX=g++" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-
-          "PKG_CONFIG=C:\msys64\mingw64\bin\pkg-config.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          "PKG_CONFIG_PATH=C:\msys64\mingw64\lib\pkgconfig" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-
-          "CGO_ENABLED=1" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-
-          "CGO_CFLAGS=-IC:\msys64\mingw64\include" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-
-          "CGO_LDFLAGS=-LC:\msys64\mingw64\lib" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-
+            tar
 
       ##########################################################################
       # Permission
@@ -144,9 +123,16 @@ jobs:
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: msys2 {0}
+        env:
+          CC: gcc
+          CXX: g++
+          CGO_ENABLED: 1
+          PKG_CONFIG_PATH: /mingw64/lib/pkgconfig
+          CGO_CFLAGS: -I/mingw64/include
+          CGO_LDFLAGS: -L/mingw64/lib
         run: |
-          bash ./scripts/build.sh $env:GITHUB_REF_NAME
+          bash ./scripts/build.sh ${{ github.ref_name }}
 
       ##########################################################################
       # Upload

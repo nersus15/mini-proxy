@@ -69,7 +69,7 @@ func (s *ProxyService) GetResource(env string, resourceType string, resid string
 
 func (s *ProxyService) PostResource(env string, resourceType string, ctx *fiber.Ctx) (*types.BaseResource, any, int, string) {
 	auth := ctx.Get("Authorization")
-	noForward := []string{"Patient", "Location", "Organization"}
+	noForward := []string{"Location", "Organization"}
 	mainUrl, forwardUrl, priority := utils.GetUrl(s.Config, env, resourceType, ctx)
 	target, _ := utils.GetTarget(priority)
 
