@@ -31,8 +31,8 @@ jobs:
           - name: macos-arm
             os: macos-14
 
-          # - name: windows
-          #   os: windows-latest
+          - name: windows
+            os: windows-latest
 
     steps:
 
