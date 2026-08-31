@@ -9,6 +9,7 @@ import (
 	cron "github.com/nersus15/lib-go-cron"
 	"github.com/nersus15/mini-proxy/mod-proxy/config"
 	"github.com/nersus15/mini-proxy/mod-proxy/handler"
+	"github.com/nersus15/mini-proxy/mod-proxy/helper/utils"
 	"github.com/nersus15/mini-proxy/mod-proxy/repository"
 	"github.com/nersus15/mini-proxy/mod-proxy/service"
 	"github.com/webcore-go/webcore/app/core"
@@ -88,6 +89,13 @@ func (m *Module) Init(ctx *core.AppContext) error {
 		}
 	}
 
+	if m.config.Idempotency.Enabled {
+		logger.Info("Idempotency aktif: respons POST yang sukses akan di-cache",
+			"ttl_minutes", m.config.Idempotency.TTLMinutes)
+	} else {
+		logger.Warn("Idempotency NONAKTIF: request POST yang identik akan tetap diteruskan ke SatuSehat dan berpotensi membuat data ganda")
+	}
+
 	m.service = service.NewProxyService(ctx, m.config, m.repository)
 	m.handler = handler.NewHandler(ctx, m.config, m.service)
 	m.taskService = service.NewTaskService(m.repository, m.service, m.config)
@@ -115,16 +123,25 @@ func (m *Module) Init(ctx *core.AppContext) error {
 		}
 
 		if _, err := m.cron.AddFunc(m.config.Cron.Schedule, func() {
-			m.taskService.ProcessResourceRetryTasks()
+			utils.RunBackground("RetryTransactionJob", m.taskService.ProcessResourceRetryTasks)
 		}); err != nil {
 			logger.ErrorJson("Error Menambahkan Cronjob", err)
 		}
 
 		// CronJob Untuk Credential
 		if _, err := m.cron.AddFunc("*/5 * * * *", func() {
-			m.taskService.SyncCredential()
+			utils.RunBackground("RetryCredentialJob", m.taskService.SyncCredential)
 		}); err != nil {
 			logger.ErrorJson("Error Menambahkan Cronjob", err)
+		}
+
+		// CronJob pembersih cache idempotency yang sudah kedaluwarsa
+		if m.config.Idempotency.Enabled {
+			if _, err := m.cron.AddFunc("*/10 * * * *", func() {
+				utils.RunBackground("CleanupIdempotencyJob", m.service.CleanupIdempotency)
+			}); err != nil {
+				logger.ErrorJson("Error Menambahkan Cronjob", err)
+			}
 		}
 	}
 
