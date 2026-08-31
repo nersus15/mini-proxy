@@ -33,14 +33,14 @@ func ResolveTokenEndpoint(env, target string, cfg *config.ModuleConfig) string {
 	return cfg.SatSetProd.AuthURL
 }
 
-func SendRequest(client *http.Client, cfg *config.ModuleConfig, method, urlValue, env, target, auth string, body []byte) (*types.BaseResource, any, *http.Request, *http.Response, int, string) {
+func SendRequest(client *http.Client, cfg *config.ModuleConfig, method, urlValue, env, target, auth string, body []byte) (*types.BaseResource, any, []byte, *http.Request, *http.Response, int, string) {
 	req, err := http.NewRequest(method, urlValue, bytes.NewReader(body))
 	if err != nil {
 		errcode := ERR_SATUSEHAT_FORMAT
 		if target == "ildki" {
 			errcode = ERR_HAPI_FORMAT
 		}
-		return nil, nil, req, nil, errcode, fmt.Sprintf("gagal membuat request: %s", err)
+		return nil, nil, nil, req, nil, errcode, fmt.Sprintf("gagal membuat request: %s", err)
 	}
 
 	req.Header.Add("Authorization", auth)
@@ -51,7 +51,7 @@ func SendRequest(client *http.Client, cfg *config.ModuleConfig, method, urlValue
 		if cfg.Ildki.ZeroTrust {
 			if errSign := AddSignatureToRequest(cfg.Ildki.Faskes, req, body); errSign != nil {
 				logger.Error("Gagal menambahkan signature pada request", "Err", errSign.Error())
-				return nil, nil, req, nil, 500, errSign.Error()
+				return nil, nil, nil, req, nil, 500, errSign.Error()
 			}
 		}
 	}
@@ -59,7 +59,7 @@ func SendRequest(client *http.Client, cfg *config.ModuleConfig, method, urlValue
 	response, err := client.Do(req)
 	if err != nil {
 		errcode, errstr := HttpError(target, req, nil, err)
-		return nil, nil, req, nil, errcode, errstr
+		return nil, nil, nil, req, nil, errcode, errstr
 	}
 	defer CloseBody(response.Body)
 
@@ -76,7 +76,7 @@ func SendRequest(client *http.Client, cfg *config.ModuleConfig, method, urlValue
 		if target == "ildki" {
 			errcode = ERR_HAPI_FORMAT
 		}
-		return resource, rawResponse, req, response, errcode, fmt.Sprintf("gagal mem-parsing JSON: %s", err)
+		return resource, rawResponse, bodyBytes, req, response, errcode, fmt.Sprintf("gagal mem-parsing JSON: %s", err)
 	}
 
 	if err1 != nil {
@@ -89,24 +89,24 @@ func SendRequest(client *http.Client, cfg *config.ModuleConfig, method, urlValue
 		if target == "ildki" {
 			errcode = ERR_HAPI_FORMAT
 		}
-		return resource, rawResponse, req, response, errcode, "resourceType is Nul"
+		return resource, rawResponse, bodyBytes, req, response, errcode, "resourceType is Nul"
 	}
 
 	if *resource.ResourceType == "OperationOutcome" {
-		oo := resource.ResourceReal.(fhir.OperationOutcome)
-		if len(oo.Issue) > 0 && oo.Issue[0].Diagnostics != nil {
-			errcode, errstr := OperationOutcomeError(target, *oo.Issue[0].Diagnostics)
-			return resource, resource, req, response, errcode, errstr
+		outcome := resource.ResourceReal.(fhir.OperationOutcome)
+		if len(outcome.Issue) > 0 && outcome.Issue[0].Diagnostics != nil {
+			errcode, errstr := OperationOutcomeError(target, *outcome.Issue[0].Diagnostics)
+			return resource, resource, bodyBytes, req, response, errcode, errstr
 		}
 
 		errcode := ERR_SATUSEHAT_UNDEFINED
 		if target == "ildki" {
 			errcode = ERR_HAPI_UNDEFINED
 		}
-		return resource, rawResponse, req, response, errcode, fmt.Sprintf("response OperationOutcome dari %s-%s: %s \n Detail: %s", target, env, helper.ToLogJSON(oo), helper.ToLogJSON(resource))
+		return resource, rawResponse, bodyBytes, req, response, errcode, fmt.Sprintf("response OperationOutcome dari %s-%s: %s \n Detail: %s", target, env, helper.ToLogJSON(outcome), helper.ToLogJSON(resource))
 	}
 
-	return resource, rawResponse, req, response, 0, ""
+	return resource, rawResponse, bodyBytes, req, response, 0, ""
 }
 
 func BuildForwardRequest(ctx *fiber.Ctx, mainUrl string, raw any, httpResponse *http.Response) ([]byte, error) {
