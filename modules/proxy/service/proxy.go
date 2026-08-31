@@ -63,7 +63,7 @@ func (s *ProxyService) GetResource(env string, resourceType string, resid string
 	}
 
 	logger.Info("Send GET Request Resource ==> ", "ENV", env, "Resource Type", resourceType, "Resource Id", resid, "Params: "+helper.ToLogJSON(params), "To", mainUrl)
-	resource, raw, _, _, errcode, errstr := utils.SendRequest(s.httpClient(&env), s.Config, "GET", mainUrl, env, target, auth, nil)
+	resource, raw, _, _, _, errcode, errstr := utils.SendRequest(s.httpClient(&env), s.Config, "GET", mainUrl, env, target, auth, nil)
 	return resource, raw, errcode, errstr
 }
 
@@ -77,11 +77,25 @@ func (s *ProxyService) PostResource(env string, resourceType string, ctx *fiber.
 		return nil, nil, 400, "priority must be 'local-first' or 'satusehat-first'"
 	}
 
+	body := ctx.Body()
+	clientId := s.clientIdFromAuth(auth)
+	fingerprint := s.idempotencyFingerprint(clientId, env, "POST", mainUrl, body)
+
+	if cached, ok := s.lookupIdempotency(fingerprint); ok {
+		logger.Info("Request identik sudah pernah sukses, mengembalikan respons tersimpan",
+			"ENV", env, "Resource Type", resourceType, "fingerprint", fingerprint)
+		return nil, cached, 0, ""
+	}
+
 	logger.Info("Send POST Request Resource ==> ", "ENV", env, "Resource Type", resourceType, "To", mainUrl, "Forward", forwardUrl)
-	resource, raw, _, httpResponse, errcode, errstr := utils.SendRequest(s.httpClient(&env), s.Config, "POST", mainUrl, env, target, auth, ctx.Body())
+	resource, raw, responseBytes, _, httpResponse, errcode, errstr := utils.SendRequest(s.httpClient(&env), s.Config, "POST", mainUrl, env, target, auth, body)
 
 	if target == "ildki" {
 		return resource, raw, 0, ""
+	}
+
+	if errcode == 0 && errstr == "" {
+		s.storeIdempotency(fingerprint, clientId, env, "POST", resourceType, mainUrl, resource, responseBytes)
 	}
 
 	if errcode == 0 && errstr == "" && !slices.Contains(noForward, resourceType) {
@@ -110,7 +124,7 @@ func (s *ProxyService) PutResource(env string, resourceType string, id string, c
 	forwardUrl = fmt.Sprintf("%s/%s", forwardUrl, id)
 	logger.Info("Send PUT Request ==> ", "ENV", env, "Resource Type", resourceType, "To", mainUrl, "Forward", forwardUrl)
 
-	resource, raw, _, httpResponse, errcode, errstr := utils.SendRequest(s.httpClient(&env), s.Config, "PUT", mainUrl, env, target, auth, ctx.Body())
+	resource, raw, _, _, httpResponse, errcode, errstr := utils.SendRequest(s.httpClient(&env), s.Config, "PUT", mainUrl, env, target, auth, ctx.Body())
 	if target == "ildki" {
 		return resource, raw, 0, ""
 	}
@@ -141,7 +155,7 @@ func (s *ProxyService) PatchResource(env string, resourceType string, id string,
 	forwardUrl = fmt.Sprintf("%s/%s", forwardUrl, id)
 	logger.Info("Send PATCH Request ==> ", "ENV", env, "Resource Type", resourceType, "To", mainUrl, "Forward", forwardUrl)
 
-	resource, raw, _, httpResponse, errcode, errstr := utils.SendRequest(s.httpClient(&env), s.Config, "PATCH", mainUrl, env, target, auth, ctx.Body())
+	resource, raw, _, _, httpResponse, errcode, errstr := utils.SendRequest(s.httpClient(&env), s.Config, "PATCH", mainUrl, env, target, auth, ctx.Body())
 	if target == "ildki" {
 		return resource, raw, errcode, errstr
 	}
@@ -376,6 +390,45 @@ func (s *ProxyService) saveCredentialBackground(repo *repository.ProxyRepository
 	}
 
 	logger.Info("Successfully saved client credential", "client_id", entityData.ClientID, "env", env)
+}
+
+func (s *ProxyService) idempotencyFingerprint(clientId string, env string, method string, url string, body []byte) string {
+	if !s.Config.Idempotency.Enabled {
+		return ""
+	}
+	return utils.RequestFingerprint(clientId, env, method, url, body)
+}
+
+func (s *ProxyService) clientIdFromAuth(auth string) string {
+	return utils.ClientIdFromAuth(s.Repository, auth)
+}
+
+func (s *ProxyService) lookupIdempotency(fingerprint string) (any, bool) {
+	return utils.LookupIdempotency(s.Repository, fingerprint)
+}
+
+func (s *ProxyService) storeIdempotency(fingerprint string, clientId string, env string, method string, resourceType string, url string, resource *types.BaseResource, responseBody []byte) {
+	var resourceId string
+	if resource != nil && resource.Id != nil {
+		resourceId = *resource.Id
+	}
+
+	utils.StoreIdempotency(s.Repository, utils.IdempotencyRecord{
+		Fingerprint:  fingerprint,
+		Client:       clientId,
+		Env:          env,
+		Method:       method,
+		ResourceType: resourceType,
+		Url:          url,
+		ResourceID:   resourceId,
+		ResponseBody: responseBody,
+		TTL:          utils.IdempotencyTTL(s.Config.Idempotency.TTLMinutes),
+	})
+}
+
+// CleanupIdempotency dipanggil cronjob untuk membuang cache kedaluwarsa.
+func (s *ProxyService) CleanupIdempotency() {
+	utils.CleanupIdempotency(s.Repository)
 }
 
 func (h *ProxyService) httpClient(env *string) *http.Client {

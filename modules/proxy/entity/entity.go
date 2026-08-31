@@ -41,8 +41,29 @@ type ClinetCredential struct {
 	UpdatedAt      time.Time `bun:"updated_at,default:current_timestamp" json:"updated_at"`
 }
 
+// RequestIdempotency menyimpan respons sukses dari SatuSehat, dikunci dengan
+// sidik jari request, supaya retry klien tidak membuat data ganda.
+type RequestIdempotency struct {
+	bun.BaseModel `bun:"table:request_idempotency,alias:ri"`
+
+	Fingerprint  string          `bun:"fingerprint,pk"`
+	Client       string          `bun:"client,notnull"`
+	Env          string          `bun:"env,notnull"`
+	Method       string          `bun:"method,notnull"`
+	ResourceType string          `bun:"resource_type,notnull"`
+	Url          string          `bun:"url,notnull"`
+	ResourceID   string          `bun:"resource_id,nullzero"`
+	ResponseBody json.RawMessage `bun:"response_body"`
+	CreatedAt    time.Time       `bun:"created_at,default:current_timestamp"`
+	ExpiredAt    time.Time       `bun:"expired_at,notnull"`
+}
+
 func (t Transactions) TableName() string {
 	return "transactions"
+}
+
+func (t RequestIdempotency) TableName() string {
+	return "request_idempotency"
 }
 
 func (t ClinetCredential) TableName() string {

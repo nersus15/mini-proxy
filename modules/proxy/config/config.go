@@ -11,11 +11,17 @@ type ModuleConfig struct {
 	Kafka                  config.KafkaConfig         `mapstructure:"kafka" json:"kafka"`
 	Cron                   CronConfig                 `mapstructure:"cron" json:"cron"`
 	Ildki                  IldkiConfig                `mapstructure:"ildki" json:"ildki"`
+	Idempotency            IdempotencyConfig          `mapstructure:"idempotency" json:"idempotency"`
 	SatSetDev              SatusehatConfig            `mapstructure:"satusehat_dev" json:"satusehat_dev"`
 	SatSetProd             SatusehatConfig            `mapstructure:"satusehat_prod" json:"satusehat_prod"`
 }
 
 type SatusehatPropagationConfig struct {
+}
+
+type IdempotencyConfig struct {
+	Enabled    bool `mapstructure:"enabled" json:"enabled"`
+	TTLMinutes int  `mapstructure:"ttl_minutes" json:"ttl_minutes"`
 }
 
 type SatusehatConfig struct {
@@ -92,6 +98,13 @@ func (c *ModuleConfig) SetEnvBindings() map[string]string {
 		"module.fhir.cron.schedule":         "CRON_SCHEDULE",
 		"module.fhir.cron.backup_chunksize": "CRON_BACKUP_CHUNKSIZE",
 		"module.fhir.cron.backup_limit":     "CRON_BACKUP_LIMIT",
+
+		// IDEMPOTENCY
+		// Wajib ada di sini, bukan cuma di SetDefaults: default hanya berlaku
+		// untuk key yang sudah muncul di AllKeys viper, dan BindEnv yang
+		// mendaftarkannya saat config.yaml belum memuat blok ini.
+		"module.fhir.idempotency.enabled":     "MODULE_FHIR_IDEMPOTENCY_ENABLED",
+		"module.fhir.idempotency.ttl_minutes": "MODULE_FHIR_IDEMPOTENCY_TTL_MINUTES",
 	}
 }
 
@@ -126,6 +139,9 @@ func (c *ModuleConfig) SetDefaults() map[string]any {
 		"module.fhir.cron.schedule":         "*/10 23 * * *",
 		"module.fhir.cron.backup_chunksize": 100,
 		"module.fhir.cron.backup_limit":     5,
+
+		"module.fhir.idempotency.enabled":     true,
+		"module.fhir.idempotency.ttl_minutes": 5,
 	}
 
 	// tambahkan key hapi dengan value sama persis dari ildki

@@ -202,7 +202,6 @@ func (r *ProxyRepository) GetToken(token *string) []types.Token {
 	var memkey string
 	var credential []entity.ClinetCredential
 
-	logger.Info(fmt.Sprintf("Ambil token: %s", *token))
 	filter := []port.DbExpression{
 		// {
 		// 	Expr: "(client_id = ? OR client_id = ?)",
@@ -211,6 +210,8 @@ func (r *ProxyRepository) GetToken(token *string) []types.Token {
 	}
 
 	if token != nil {
+		logger.Info(fmt.Sprintf("Ambil token: %s", *token))
+
 		memkey = "token_" + *token
 		// Cek cache
 		ok := r.Memory.Get(memkey, &tokens)
@@ -240,7 +241,7 @@ func (r *ProxyRepository) GetToken(token *string) []types.Token {
 
 	// Cache token yang didapat dari GetToken - jika tujuannya untuk mendapatkan client_id
 	if token != nil {
-		r.Memory.Set(memkey, tokens, 6*time.Hour)
+		r.Memory.Set(memkey, tokens, 5*time.Hour)
 	}
 
 	return tokens
@@ -295,4 +296,48 @@ func (d *ProxyRepository) StartMigration(DB interface{}, dialect string, service
 	}
 
 	return nil
+}
+
+// FindIdempotency mengembalikan nil kalau tidak ada atau sudah kedaluwarsa.
+func (r *ProxyRepository) FindIdempotency(fingerprint string) (*entity.RequestIdempotency, error) {
+	var records []entity.RequestIdempotency
+
+	filter := []port.DbExpression{
+		{
+			Expr: "fingerprint = ? AND expired_at > ?",
+			Args: []any{fingerprint, time.Now()},
+		},
+	}
+
+	err := r.Connection.Find(r.Context.Context, &records, entity.RequestIdempotency{}.TableName(),
+		[]string{"fingerprint", "client", "env", "method", "resource_type", "url", "resource_id", "response_body", "created_at", "expired_at"},
+		filter, map[string]int{}, 1, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(records) == 0 {
+		return nil, nil
+	}
+
+	return &records[0], nil
+}
+
+// SaveIdempotency menyimpan respons sukses.
+func (r *ProxyRepository) SaveIdempotency(record *entity.RequestIdempotency) error {
+	_, err := r.Connection.InsertOne(r.Context.Context, record.TableName(), record)
+
+	return err
+}
+
+// DeleteExpiredIdempotency membersihkan cache yang sudah lewat masa berlaku.
+func (r *ProxyRepository) DeleteExpiredIdempotency() (int64, error) {
+	filter := []port.DbExpression{
+		{
+			Expr: "expired_at <= ?",
+			Args: []any{time.Now()},
+		},
+	}
+
+	return r.Connection.Delete(r.Context.Context, entity.RequestIdempotency{}.TableName(), filter)
 }
