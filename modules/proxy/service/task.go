@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -42,7 +43,11 @@ func (s *TaskService) ProcessResourceRetryTasks() {
 		logger.Error("Gagal mengambil resource retry tasks", "err", err)
 		return
 	}
-	logger.Info("Resource Retry Tasks Tersedia", len(tasks))
+
+	logger.Info("Resource Retry Tasks Tersedia: " + strconv.Itoa(len(tasks)))
+	if len(tasks) == 0 {
+		return
+	}
 
 	newTokens := s.Repository.GetToken(nil)
 	logger.InfoJson("Token Untuk Refresh Authorization", newTokens)
@@ -68,7 +73,7 @@ func (s *TaskService) ProcessCredentialRetryTasks() {
 		logger.Error("Gagal mengambil credential retry tasks", "err", err)
 		return
 	}
-	logger.Info("Credential Retry Tasks Tersedia", len(tasks))
+	logger.Info("Credential Retry Tasks Tersedia: " + strconv.Itoa(len(tasks)))
 
 	for i := range tasks {
 		s.applyBackupHostnameFallback(&tasks[i])
